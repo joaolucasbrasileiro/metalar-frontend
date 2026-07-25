@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes carousel-timer {
+  from {
+    stroke-dashoffset: 56.5487;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-carousel-timer {
+  animation: carousel-timer 5000ms linear forwards;
+}
