@@ -13,16 +13,26 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 });
 
 export function ProductCard({ product }: ProductCardProps) {
+    const isSvgImage = product.imageUrl?.endsWith(".svg") ?? false;
+    const regularPriceLabel = product.regularPrice
+        ? currencyFormatter.format(product.regularPrice)
+        : "\u00a0";
+    const soldQuantityLabel =
+        product.soldQuantity !== null
+            ? `${formatSoldQuantity(product.soldQuantity)} vendidos`
+            : "\u00a0";
+
     return (
-        <article className="flex h-full w-[176px] shrink-0 snap-start flex-col rounded-[8px] border border-zinc-200 bg-white p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:w-[196px] lg:w-[210px]">
+        <article className="flex h-[430px] w-[176px] shrink-0 snap-start flex-col rounded-[8px] border border-zinc-200 bg-white p-3 shadow-sm transition-all duration-200 hover:border-[#FFD900] hover:shadow-md sm:w-[196px] lg:w-[210px]">
             <a href={product.href} className="block">
-                <div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-[6px] bg-zinc-50">
+                <div className="relative grid h-[178px] w-full place-items-center overflow-hidden rounded-[6px] bg-zinc-50 sm:h-[198px] lg:h-[210px]">
                     {product.imageUrl ? (
                         <Image
                             src={product.imageUrl}
                             alt={product.imageAlt}
                             fill
                             sizes="(max-width: 640px) 176px, (max-width: 1024px) 196px, 210px"
+                            unoptimized={isSvgImage}
                             className="object-contain p-2"
                         />
                     ) : (
@@ -40,35 +50,31 @@ export function ProductCard({ product }: ProductCardProps) {
                     )}
                 </div>
 
-                <div className="mt-3 min-h-[48px]">
+                <div className="mt-3 h-[70px]">
                     <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-900">
                         {product.name}
                     </h3>
 
                     {product.unit && (
-                        <span className="mt-1 block text-xs font-medium text-zinc-500">
+                        <span className="mt-1 block truncate text-xs font-medium text-zinc-500">
                             Unidade: {product.unit}
                         </span>
                     )}
                 </div>
             </a>
 
-            <div className="mt-auto pt-3">
-                {product.regularPrice && (
-                    <span className="block text-xs font-medium text-zinc-400 line-through">
-                        {currencyFormatter.format(product.regularPrice)}
-                    </span>
-                )}
+            <div className="mt-auto flex h-[112px] flex-col justify-end pt-3">
+                <span className="block h-4 text-xs font-medium text-zinc-400 line-through">
+                    {regularPriceLabel}
+                </span>
 
                 <strong className="block text-base font-extrabold text-zinc-950">
                     {product.price !== null ? currencyFormatter.format(product.price) : "Consultar"}
                 </strong>
 
-                {product.soldQuantity !== null && (
-                    <span className="mt-1 block text-[11px] font-medium text-zinc-500">
-                        {formatSoldQuantity(product.soldQuantity)} vendidos
-                    </span>
-                )}
+                <span className="mt-1 block h-4 text-[11px] font-medium text-zinc-500">
+                    {soldQuantityLabel}
+                </span>
 
                 <div className="mt-3 flex items-center justify-between gap-2">
                     <div className="flex h-8 items-center rounded-[4px] border border-zinc-200 bg-zinc-50">

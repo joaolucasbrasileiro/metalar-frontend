@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local visual mocks
+/src/features/home/mock-products.local.json
+/public/mock-products.local/
+
 # vercel
 .vercel
 

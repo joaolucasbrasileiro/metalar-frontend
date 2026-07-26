@@ -30,7 +30,7 @@ export function ProductShelf({ products }: ProductShelfProps) {
 
     return (
         <section className="bg-zinc-100 pb-9 pt-2 sm:pb-12">
-            <div className="mx-auto max-w-[1180px] px-4 sm:px-6 lg:px-0">
+            <div className="mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-0">
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <h2 className="text-xl font-extrabold text-zinc-950 sm:text-2xl">
                         Mais Vendidos
@@ -45,19 +45,19 @@ export function ProductShelf({ products }: ProductShelfProps) {
                 </div>
 
                 {products.length > 0 ? (
-                    <div className="group relative">
+                    <div className="grid items-center gap-3 lg:grid-cols-[48px_minmax(0,1fr)_48px]">
                         <button
                             type="button"
                             aria-label="Ver produtos anteriores"
                             onClick={() => scrollCarousel("previous")}
-                            className="absolute left-0 top-1/2 z-10 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-950 shadow-md transition-colors hover:bg-zinc-50 lg:grid"
+                            className="hidden h-12 w-12 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-950 shadow-md transition-colors hover:border-[#FFD900] hover:bg-[#FFD900] lg:grid"
                         >
                             <ChevronLeft className="h-5 w-5" strokeWidth={2.4} />
                         </button>
 
                         <div
                             ref={carouselRef}
-                            className="flex gap-4 overflow-x-auto scroll-smooth pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                            className="flex min-w-0 items-stretch gap-4 overflow-x-auto scroll-smooth px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
                             {products.map((product) => (
                                 <ProductCard key={product.id} product={product} />
@@ -68,7 +68,7 @@ export function ProductShelf({ products }: ProductShelfProps) {
                             type="button"
                             aria-label="Ver próximos produtos"
                             onClick={() => scrollCarousel("next")}
-                            className="absolute right-0 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 translate-x-1/2 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-950 shadow-md transition-colors hover:bg-zinc-50 lg:grid"
+                            className="hidden h-12 w-12 place-items-center rounded-full border border-zinc-200 bg-white text-zinc-950 shadow-md transition-colors hover:border-[#FFD900] hover:bg-[#FFD900] lg:grid"
                         >
                             <ChevronRight className="h-5 w-5" strokeWidth={2.4} />
                         </button>

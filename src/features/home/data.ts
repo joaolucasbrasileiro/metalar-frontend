@@ -13,8 +13,20 @@ export type HomeProduct = {
     soldQuantity: number | null;
 };
 
+export type ProductsPage = {
+    products: HomeProduct[];
+    currentPage: number;
+    lastPage: number;
+    total: number;
+};
+
 type ApiCollection<T> = {
     data?: T[];
+    meta?: {
+        current_page?: number;
+        last_page?: number;
+        total?: number;
+    };
 };
 
 type ApiProductImage = {
@@ -45,6 +57,12 @@ type ApiProduct = {
     sold_quantity?: string | number | null;
 };
 
+type MockProductsFile = {
+    products?: HomeProduct[];
+};
+
+const catalogProductsPerPage = 12;
+
 function getApiUrl(path: string) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
@@ -59,6 +77,23 @@ function getApiUrl(path: string) {
 }
 
 export async function getBestSellerProducts(): Promise<HomeProduct[]> {
+    const mockProducts = await getLocalMockProducts();
+
+    if (mockProducts) {
+        return [...mockProducts]
+            .sort((firstProduct, secondProduct) => {
+                const firstSoldQuantity = firstProduct.soldQuantity ?? 0;
+                const secondSoldQuantity = secondProduct.soldQuantity ?? 0;
+
+                return secondSoldQuantity - firstSoldQuantity;
+            })
+            .slice(0, 12)
+            .map((product, index) => ({
+                ...product,
+                salesRank: index + 1,
+            }));
+    }
+
     try {
         const response = await fetch(getApiUrl("/products/best-sellers"), {
             cache: "no-store",
@@ -76,6 +111,75 @@ export async function getBestSellerProducts(): Promise<HomeProduct[]> {
         return (payload.data ?? []).map(mapBestSellerProduct);
     } catch {
         return [];
+    }
+}
+
+export async function getProductsPage(page: number): Promise<ProductsPage> {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const mockProducts = await getLocalMockProducts();
+
+    if (mockProducts) {
+        const firstProductIndex = (safePage - 1) * catalogProductsPerPage;
+        const products = mockProducts.slice(
+            firstProductIndex,
+            firstProductIndex + catalogProductsPerPage,
+        );
+
+        return {
+            products,
+            currentPage: safePage,
+            lastPage: Math.max(1, Math.ceil(mockProducts.length / catalogProductsPerPage)),
+            total: mockProducts.length,
+        };
+    }
+
+    try {
+        const response = await fetch(
+            getApiUrl(`/products?page=${safePage}&per_page=${catalogProductsPerPage}`),
+            {
+                cache: "no-store",
+                headers: {
+                    Accept: "application/json",
+                },
+            },
+        );
+
+        if (!response.ok) {
+            return emptyProductsPage(safePage);
+        }
+
+        const payload = (await response.json()) as ApiCollection<ApiProduct>;
+
+        return {
+            products: (payload.data ?? []).map(mapBestSellerProduct),
+            currentPage: payload.meta?.current_page ?? safePage,
+            lastPage: payload.meta?.last_page ?? 1,
+            total: payload.meta?.total ?? 0,
+        };
+    } catch {
+        return emptyProductsPage(page);
+    }
+}
+
+async function getLocalMockProducts(): Promise<HomeProduct[] | null> {
+    if (
+        process.env.NODE_ENV === "production" ||
+        process.env.NEXT_PUBLIC_USE_MOCK_PRODUCTS !== "true"
+    ) {
+        return null;
+    }
+
+    try {
+        const { readFile } = await import("node:fs/promises");
+        const file = await readFile(
+            `${process.cwd()}/src/features/home/mock-products.local.json`,
+            "utf-8",
+        );
+        const payload = JSON.parse(file) as MockProductsFile;
+
+        return Array.isArray(payload.products) ? payload.products : null;
+    } catch {
+        return null;
     }
 }
 
@@ -102,6 +206,15 @@ function mapBestSellerProduct(product: ApiProduct): HomeProduct {
         unit: skuWithBestOffer?.unit ?? product.skus?.[0]?.unit ?? null,
         salesRank: product.sales_rank ?? null,
         soldQuantity: parseNumber(product.sold_quantity),
+    };
+}
+
+function emptyProductsPage(page: number): ProductsPage {
+    return {
+        products: [],
+        currentPage: Number.isFinite(page) && page > 0 ? Math.floor(page) : 1,
+        lastPage: 1,
+        total: 0,
     };
 }
 
