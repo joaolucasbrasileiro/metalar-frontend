@@ -126,7 +126,7 @@ export function HomeHeader() {
                     items-center
                     gap-2
                     text-base
-                    font-medium
+                    font-semibold
                     text-zinc-950
                     after:absolute
                     after:bottom-0
@@ -170,7 +170,7 @@ export function HomeHeader() {
                         <a
                             key={option.href}
                             href={option.href}
-                            className="relative flex h-full items-center text-base font-medium text-zinc-950 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:rounded-full after:bg-[#D71920] after:opacity-0 after:transition-opacity after:duration-200 hover:after:opacity-100 focus-visible:after:opacity-100"
+                            className="relative flex h-full items-center text-base font-semibold text-zinc-950 after:absolute after:bottom-0 after:left-0 after:h-[3px] after:w-full after:rounded-full after:bg-[#D71920] after:opacity-0 after:transition-opacity after:duration-200 hover:after:opacity-100 focus-visible:after:opacity-100"
                         >
                             {option.label}
                         </a>
