@@ -75,24 +75,24 @@ export function HomeHeader() {
             </div>
             <div className="ml-auto flex items-center gap-1 text-zinc-950 sm:gap-2 lg:gap-3">
                 <a
-                href="#"
+                href="/favorites"
                 aria-label="Favoritos"
-                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12">
+                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:text-[#D71920] sm:h-12 sm:w-12">
                     <Heart className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.7}/>
                 </a>
-                <div className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
-                    <Link href="/login" aria-label="Minha conta" className="grid place-items-center">
+                <div className="group grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover: sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
+                    <Link href="/login" aria-label="Minha conta" className="grid place-items-center group-hover:text-[#D71920]">
                         <UserRound className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={1.7}/>
                     </Link>
                     <span className="hidden flex-col leading-tight lg:flex">
                         <span className="text-xs font-semibold">Bem-vindo!</span>
                         <span className="text-[11px] font-medium">
                             Faça{" "}
-                            <Link href="/login" className="hover:underline">
-                                login
+                            <Link href="/login" className="font-semibold hover:underline hover:text-[#D71920]">
+                                Login
                             </Link>{" "}
                             ou{" "}
-                            <Link href="/signup" className="hover:underline">
+                            <Link href="/signup" className="font-semibold hover:underline hover:text-[#D71920]">
                                 Cadastre-se
                             </Link>
                         </span>
@@ -101,8 +101,8 @@ export function HomeHeader() {
                 <a
                 href="#"
                 aria-label="Carrinho"
-                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
-                    <ShoppingCart className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={1.7}/>
+                className="group grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
+                    <ShoppingCart className="h-6 w-6 shrink-0 sm:h-7 sm:w-7 group-hover:text-[#D71920]" strokeWidth={1.7}/>
                     <span className="hidden flex-col leading-tight lg:flex">
                         <span className="text-xs font-semibold">Carrinho</span>
                         <span className="text-[11px] font-medium">{cartItemsLabel}</span>

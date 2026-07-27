@@ -11,6 +11,14 @@ type SignupFeedback = {
     message: string;
 } | null;
 
+const requiredFields = [
+    { name: "name", label: "nome completo" },
+    { name: "email", label: "e-mail" },
+    { name: "phone", label: "telefone/WhatsApp" },
+    { name: "password", label: "senha" },
+    { name: "password_confirmation", label: "confirmação de senha" },
+];
+
 function getApiUrl(path: string) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
@@ -54,6 +62,30 @@ function getErrorMessage(payload: unknown): string {
     return "Não foi possível criar sua conta. Confira os dados e tente novamente.";
 }
 
+function getMissingFieldMessage(formData: FormData, documentLabel: string) {
+    const document = formData.get("cpf");
+
+    if (typeof document !== "string" || document.trim() === "") {
+        return `Preencha o campo ${documentLabel} para continuar.`;
+    }
+
+    const missingField = requiredFields.find(({ name }) => {
+        const value = formData.get(name);
+
+        return typeof value !== "string" || value.trim() === "";
+    });
+
+    if (missingField) {
+        return `Preencha o campo ${missingField.label} para continuar.`;
+    }
+
+    if (formData.get("terms") !== "on") {
+        return "Aceite os Termos de Uso e a Política de Privacidade para continuar.";
+    }
+
+    return null;
+}
+
 export function SignupForm() {
     const [accountType, setAccountType] = React.useState<AccountTypeId>("individual");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -61,14 +93,28 @@ export function SignupForm() {
     const documentLabel = accountType === "company" ? "CNPJ" : "CPF";
     const documentPlaceholder =
         accountType === "company" ? "00.000.000/0000-00" : "000.000.000-00";
+    const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
+    const [isPasswordConfirmationVisible, setIsPasswordConfirmationVisible] = React.useState(false);
 
-    async function handleSignupSubmit(event: React.FormEvent<HTMLFormElement>) {
+    async function handleSignupSubmit(
+        event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
+    ) {
         event.preventDefault();
 
         const form = event.currentTarget;
         const formData = new FormData(form);
         const password = String(formData.get("password") ?? "");
         const passwordConfirmation = String(formData.get("password_confirmation") ?? "");
+        const missingFieldMessage = getMissingFieldMessage(formData, documentLabel);
+
+        if (missingFieldMessage) {
+            setFeedback({
+                type: "error",
+                message: missingFieldMessage,
+            });
+
+            return;
+        }
 
         if (password !== passwordConfirmation) {
             setFeedback({
@@ -113,7 +159,7 @@ export function SignupForm() {
             setAccountType("individual");
             setFeedback({
                 type: "success",
-                message: "Conta criada com sucesso. Agora você já pode fazer login.",
+                message: "Conta criada com sucesso! Ative sua conta confirmando o e-mail.",
             });
         } catch {
             setFeedback({
@@ -173,7 +219,6 @@ export function SignupForm() {
                             type="text"
                             name="name"
                             placeholder="Digite seu nome completo"
-                            required
                             className="h-11 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
                     </label>
@@ -184,7 +229,6 @@ export function SignupForm() {
                             type="email"
                             name="email"
                             placeholder="seu@email.com"
-                            required
                             className="h-11 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
                     </label>
@@ -197,7 +241,6 @@ export function SignupForm() {
                             type="text"
                             name="cpf"
                             placeholder={documentPlaceholder}
-                            required
                             className="h-11 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
                     </label>
@@ -208,7 +251,6 @@ export function SignupForm() {
                             type="tel"
                             name="phone"
                             placeholder="(11) 99999-9999"
-                            required
                             className="h-11 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
                     </label>
@@ -218,13 +260,18 @@ export function SignupForm() {
                     Senha
                     <span className="relative">
                         <input
-                            type="password"
+                            type={isPasswordVisible ? "text" : "password"}
                             name="password"
                             placeholder="Digite sua senha"
-                            required
                             className="h-11 w-full rounded-[6px] border border-zinc-300 bg-white px-4 pr-11 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
-                        <Eye className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+                        <button 
+                            type="button"
+                            onClick={() => setIsPasswordVisible((current) => (!current))}
+                            className={`absolute right-3 top-1/2 -translate-y-1/2
+                                ${isPasswordVisible ? "text-[#FFD900]" : "text-zinc-600"}`}>
+                            <Eye className="h-4 w-4" />
+                        </button>
                     </span>
                 </label>
 
@@ -232,31 +279,36 @@ export function SignupForm() {
                     Confirmar senha
                     <span className="relative">
                         <input
-                            type="password"
+                            type={isPasswordConfirmationVisible ? "text" : "password"}
                             name="password_confirmation"
                             placeholder="Confirme sua senha"
-                            required
                             className="h-11 w-full rounded-[6px] border border-zinc-300 bg-white px-4 pr-11 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
-                        <Eye className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+                        <button 
+                            type="button"
+                            onClick={() => setIsPasswordConfirmationVisible((current) => (!current))}
+                            className={`absolute right-3 top-1/2 -translate-y-1/2
+                                ${isPasswordConfirmationVisible ? "text-[#FFD900]" : "text-zinc-600"}`}>
+                            <Eye className="h-4 w-4" />
+                        </button>
                     </span>
                 </label>
 
                 <label className="flex items-start gap-2 text-xs font-medium text-zinc-700">
                     <input
                         type="checkbox"
-                        required
+                        name="terms"
                         className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-[#FFD900]"
                     />
                     <span>
                         Li e aceito os{" "}
-                        <Link href="/termos" className="font-bold text-blue-700">
+                        <Link href="/termos" className="font-bold text-black-900 hover:underline">
                             Termos de Uso
                         </Link>{" "}
                         e a{" "}
                         <Link
                             href="/politica-de-privacidade"
-                            className="font-bold text-blue-700"
+                            className="font-bold text-black-900 hover:underline"
                         >
                             Política de Privacidade
                         </Link>
@@ -285,7 +337,7 @@ export function SignupForm() {
 
                 <p className="text-center text-sm font-medium text-zinc-600">
                     Já tem uma conta?{" "}
-                    <Link href="/login" className="font-extrabold text-blue-700">
+                    <Link href="/sigin" className="font-extrabold text-black-900 hover:underline">
                         Entrar
                     </Link>
                 </p>
