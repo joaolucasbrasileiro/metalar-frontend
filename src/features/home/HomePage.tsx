@@ -1,9 +1,9 @@
-import { HomeHeader } from "./components/HomeHeader";
+import { HomeHeader } from "../layout/components/HomeHeader";
 import { HeroCarousel } from "./components/HeroCarousel";
 import { BenefitBar } from "./components/BenefitBar";
 import { ProductShelf } from "./components/ProductShelf";
 import { ProductGrid } from "./components/ProductGrid";
-import { HomeFooter } from "./components/HomeFooter";
+import { HomeFooter } from "../layout/components/HomeFooter";
 import { getBestSellerProducts, getProductsPage } from "./data";
 
 type HomePageProps = {
@@ -17,7 +17,7 @@ export async function HomePage({ currentProductPage }: HomePageProps) {
     ]);
 
     return (
-        <main className="min-h-screen bg-zinc-100 text-zinc-950">
+        <main className="min-h-[120vh] bg-zinc-100 text-zinc-950">
             <HomeHeader />
             <HeroCarousel />
             <BenefitBar />

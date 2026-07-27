@@ -2,6 +2,7 @@
 import { useState } from "react";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Search, Heart, UserRound, ShoppingCart, Menu, X } from "lucide-react";
 
 const optionList = [
@@ -24,8 +25,10 @@ export function HomeHeader() {
     const [isDepartmentsHovered, setIsDepartmentsHovered] = useState(false);
     const [isDepartmentsPinned, setIsDepartmentsPinned] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const cartItemsCount: number = 0;
 
     const isDepartmentsOpen = isDepartmentsHovered || isDepartmentsPinned;
+    const cartItemsLabel = cartItemsCount === 1 ? "1 produto" : `${cartItemsCount} produtos`;
 
     return (
         <header className="bg-[#FFD900] text-zinc-950">
@@ -77,17 +80,33 @@ export function HomeHeader() {
                 className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12">
                     <Heart className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.7}/>
                 </a>
-                <a
-                href="#"
-                aria-label="Minha conta"
-                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12">
-                    <UserRound className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.7}/>
-                </a>
+                <div className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
+                    <Link href="/login" aria-label="Minha conta" className="grid place-items-center">
+                        <UserRound className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={1.7}/>
+                    </Link>
+                    <span className="hidden flex-col leading-tight lg:flex">
+                        <span className="text-xs font-semibold">Bem-vindo!</span>
+                        <span className="text-[11px] font-medium">
+                            Faça{" "}
+                            <Link href="/login" className="hover:underline">
+                                login
+                            </Link>{" "}
+                            ou{" "}
+                            <Link href="/signup" className="hover:underline">
+                                Cadastre-se
+                            </Link>
+                        </span>
+                    </span>
+                </div>
                 <a
                 href="#"
                 aria-label="Carrinho"
-                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12">
-                    <ShoppingCart className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.7}/>
+                className="grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover:bg-[#E8C600] sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
+                    <ShoppingCart className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={1.7}/>
+                    <span className="hidden flex-col leading-tight lg:flex">
+                        <span className="text-xs font-semibold">Carrinho</span>
+                        <span className="text-[11px] font-medium">{cartItemsLabel}</span>
+                    </span>
                 </a>
             </div>
 
