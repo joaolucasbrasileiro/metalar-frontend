@@ -13,24 +13,28 @@ const slides = [
         image: "/banner-1.png",
         alt: "Tudo para construir do inicio ao fim",
         href: "/ofertas",
+        backgroundColor: "#f4c400",
     },
     {
         id: "2",
         image: "/banner-2.png",
         alt: "Ofertas em materiais de construcao",
         href: "/caixas",
+        backgroundColor: "#003f86",
     },
     {
         id: "3",
         image: "/banner-3.png",
         alt: "Ofertas em materiais de construcao",
         href: "/caixasss",
+        backgroundColor: "#003f86",
     },
     {
         id: "4",
         image: "/banner-4.png",
         alt: "Ofertas em materiais de construcao",
         href: "/caixasssss",
+        backgroundColor: "#d6cec2",
     },
 ];
 
@@ -80,8 +84,11 @@ export function HeroCarousel() {
     }
 
     return (
-        <section className="w-full bg-zinc-100">
-            <div className="group relative h-[clamp(200px,37vw,500px)] bg-zinc-200">
+        <section
+            className="w-full transition-colors duration-500"
+            style={{ backgroundColor: slides[activeSlideIndex].backgroundColor }}
+        >
+            <div className="group relative mx-auto h-[clamp(200px,26.0417vw,500px)] max-w-[1920px] bg-zinc-200">
                 <div className="h-full overflow-hidden">
                     <div
                         className="flex h-full transition-transform duration-500 ease-in-out"
@@ -100,7 +107,7 @@ export function HeroCarousel() {
                                     alt={slide.alt}
                                     fill
                                     preload={index === 0}
-                                    sizes="100vw"
+                                    sizes="(min-width: 1920px) 1920px, 100vw"
                                     className="object-cover object-center"
                                 />
                             </a>
