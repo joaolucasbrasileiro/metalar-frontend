@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -21,14 +21,61 @@ const departmentList = [
   { label: "Hidráulica", href: "/departamentos/hidraulica" },
 ];
 
+type HeaderUser = {
+    name?: string;
+    email?: string;
+};
+
 export function HomeHeader() {
     const [isDepartmentsHovered, setIsDepartmentsHovered] = useState(false);
     const [isDepartmentsPinned, setIsDepartmentsPinned] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [authenticatedUser, setAuthenticatedUser] = useState<HeaderUser | null>(null);
     const cartItemsCount: number = 0;
 
     const isDepartmentsOpen = isDepartmentsHovered || isDepartmentsPinned;
     const cartItemsLabel = cartItemsCount === 1 ? "1 produto" : `${cartItemsCount} produtos`;
+    const accountHref = authenticatedUser ? "/account" : "/signin";
+    const accountLabel = authenticatedUser ? "Minha Conta" : "Bem-vindo!";
+    const accountAction = authenticatedUser
+        ? authenticatedUser.name || authenticatedUser.email || "Acessar conta"
+        : "Login";
+
+    useEffect(() => {
+        let isMounted = true;
+
+        async function loadAuthenticatedUser() {
+            try {
+                const response = await fetch("/api/auth/me", {
+                    cache: "no-store",
+                });
+
+                if (!response.ok) {
+                    if (isMounted) {
+                        setAuthenticatedUser(null);
+                    }
+
+                    return;
+                }
+
+                const payload = (await response.json()) as { data?: HeaderUser };
+
+                if (isMounted) {
+                    setAuthenticatedUser(payload.data ?? null);
+                }
+            } catch {
+                if (isMounted) {
+                    setAuthenticatedUser(null);
+                }
+            }
+        }
+
+        loadAuthenticatedUser();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     return (
         <header className="bg-[#FFD900] text-zinc-950">
@@ -81,20 +128,28 @@ export function HomeHeader() {
                     <Heart className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.7}/>
                 </a>
                 <div className="group grid h-10 w-10 place-items-center rounded-full transition-colors duration-200 hover: sm:h-12 sm:w-12 lg:flex lg:w-auto lg:gap-2 lg:px-3">
-                    <Link href="/login" aria-label="Minha conta" className="grid place-items-center group-hover:text-[#D71920]">
+                    <Link href={accountHref} aria-label="Minha conta" className="grid place-items-center group-hover:text-[#D71920]">
                         <UserRound className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" strokeWidth={1.7}/>
                     </Link>
                     <span className="hidden flex-col leading-tight lg:flex">
-                        <span className="text-xs font-semibold">Bem-vindo!</span>
+                        <span className="text-xs font-semibold">{accountLabel}</span>
                         <span className="text-[11px] font-medium">
-                            Faça{" "}
-                            <Link href="/login" className="font-semibold hover:underline hover:text-[#D71920]">
-                                Login
-                            </Link>{" "}
-                            ou{" "}
-                            <Link href="/signup" className="font-semibold hover:underline hover:text-[#D71920]">
-                                Cadastre-se
-                            </Link>
+                            {authenticatedUser ? (
+                                <Link href={accountHref} className="font-semibold hover:underline hover:text-[#D71920]">
+                                    {accountAction}
+                                </Link>
+                            ) : (
+                                <>
+                                    Faça{" "}
+                                    <Link href="/signin" className="font-semibold hover:underline hover:text-[#D71920]">
+                                        Login
+                                    </Link>{" "}
+                                    ou{" "}
+                                    <Link href="/signup" className="font-semibold hover:underline hover:text-[#D71920]">
+                                        Cadastre-se
+                                    </Link>
+                                </>
+                            )}
                         </span>
                     </span>
                 </div>

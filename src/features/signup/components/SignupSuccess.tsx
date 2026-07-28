@@ -21,7 +21,7 @@ export function SignupSuccess() {
             </p>
 
             <Link
-                href="/login"
+                href="/signin"
                 className="mt-8 flex h-12 min-w-36 items-center justify-center rounded-[6px] bg-[#FFD900] px-6 text-sm font-extrabold text-zinc-950 shadow-sm transition-colors hover:bg-[#f2c500]"
             >
                 Entrar
