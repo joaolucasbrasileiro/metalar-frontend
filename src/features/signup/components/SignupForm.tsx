@@ -5,6 +5,7 @@ import { Eye } from "lucide-react";
 import * as React from "react";
 
 import { accountTypes, type AccountTypeId } from "../data";
+import { SignupSuccess } from "./SignupSuccess";
 
 type SignupFeedback = {
     type: "success" | "error";
@@ -62,8 +63,8 @@ function getErrorMessage(payload: unknown): string {
     return "Não foi possível criar sua conta. Confira os dados e tente novamente.";
 }
 
-function getMissingFieldMessage(formData: FormData, documentLabel: string) {
-    const document = formData.get("cpf");
+function getMissingFieldMessage(formData: FormData, documentLabel: string, documentFieldName: "cnpj" | "cpf") {
+    const document = formData.get(documentFieldName);
 
     if (typeof document !== "string" || document.trim() === "") {
         return `Preencha o campo ${documentLabel} para continuar.`;
@@ -79,7 +80,7 @@ function getMissingFieldMessage(formData: FormData, documentLabel: string) {
         return `Preencha o campo ${missingField.label} para continuar.`;
     }
 
-    if (formData.get("terms") !== "on") {
+    if (formData.get("rules") !== "on") {
         return "Aceite os Termos de Uso e a Política de Privacidade para continuar.";
     }
 
@@ -89,12 +90,14 @@ function getMissingFieldMessage(formData: FormData, documentLabel: string) {
 export function SignupForm() {
     const [accountType, setAccountType] = React.useState<AccountTypeId>("individual");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isSignupComplete, setIsSignupComplete] = React.useState(false);
     const [feedback, setFeedback] = React.useState<SignupFeedback>(null);
     const documentLabel = accountType === "company" ? "CNPJ" : "CPF";
     const documentPlaceholder =
         accountType === "company" ? "00.000.000/0000-00" : "000.000.000-00";
     const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
     const [isPasswordConfirmationVisible, setIsPasswordConfirmationVisible] = React.useState(false);
+    const documentFieldName = accountType === "company" ? "cnpj" : "cpf"; 
 
     async function handleSignupSubmit(
         event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>,
@@ -105,7 +108,7 @@ export function SignupForm() {
         const formData = new FormData(form);
         const password = String(formData.get("password") ?? "");
         const passwordConfirmation = String(formData.get("password_confirmation") ?? "");
-        const missingFieldMessage = getMissingFieldMessage(formData, documentLabel);
+        const missingFieldMessage = getMissingFieldMessage(formData, documentLabel, documentFieldName);
 
         if (missingFieldMessage) {
             setFeedback({
@@ -138,8 +141,10 @@ export function SignupForm() {
                 body: JSON.stringify({
                     name: formData.get("name"),
                     email: formData.get("email"),
-                    cpf: formData.get("cpf"),
+                    person_type: accountType,
+                    [documentFieldName]: formData.get(documentFieldName),
                     phone: formData.get("phone"),
+                    rules: formData.get("rules") === "on",
                     password,
                 }),
             });
@@ -157,10 +162,7 @@ export function SignupForm() {
 
             form.reset();
             setAccountType("individual");
-            setFeedback({
-                type: "success",
-                message: "Conta criada com sucesso! Ative sua conta confirmando o e-mail.",
-            });
+            setIsSignupComplete(true);
         } catch {
             setFeedback({
                 type: "error",
@@ -169,6 +171,10 @@ export function SignupForm() {
         } finally {
             setIsSubmitting(false);
         }
+    }
+
+    if (isSignupComplete) {
+        return <SignupSuccess />;
     }
 
     return (
@@ -239,7 +245,7 @@ export function SignupForm() {
                         {documentLabel}
                         <input
                             type="text"
-                            name="cpf"
+                            name={documentFieldName}
                             placeholder={documentPlaceholder}
                             className="h-11 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-medium outline-none transition-colors placeholder:text-zinc-400 focus:border-[#f2c500]"
                         />
@@ -297,7 +303,7 @@ export function SignupForm() {
                 <label className="flex items-start gap-2 text-xs font-medium text-zinc-700">
                     <input
                         type="checkbox"
-                        name="terms"
+                        name="rules"
                         className="mt-0.5 h-4 w-4 rounded border-zinc-300 accent-[#FFD900]"
                     />
                     <span>
