@@ -71,9 +71,11 @@ export function HomeHeader() {
         }
 
         loadAuthenticatedUser();
+        window.addEventListener("metalar-account-updated", loadAuthenticatedUser);
 
         return () => {
             isMounted = false;
+            window.removeEventListener("metalar-account-updated", loadAuthenticatedUser);
         };
     }, []);
 
