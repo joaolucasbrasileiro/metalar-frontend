@@ -118,18 +118,14 @@ export async function getProductsPage(page: number): Promise<ProductsPage> {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
 
     try {
-        const response = await fetch(
-            getApiUrl(`/products?page=${safePage}&per_page=${catalogProductsPerPage}`),
-            {
-                cache: "no-store",
-                headers: {
-                    Accept: "application/json",
-                },
-            },
-        );
+        let response = await fetchProductsPage(safePage, "latest");
 
         if (!response.ok) {
-            return emptyProductsPage(safePage);
+            response = await fetchProductsPage(safePage);
+        }
+
+        if (!response.ok) {
+            throw new Error("Products request failed.");
         }
 
         const payload = (await response.json()) as ApiCollection<ApiProduct>;
@@ -160,6 +156,24 @@ export async function getProductsPage(page: number): Promise<ProductsPage> {
             total: mockProducts.length,
         };
     }
+}
+
+function fetchProductsPage(page: number, sort?: "latest") {
+    const params = new URLSearchParams({
+        page: String(page),
+        per_page: String(catalogProductsPerPage),
+    });
+
+    if (sort) {
+        params.set("sort", sort);
+    }
+
+    return fetch(getApiUrl(`/products?${params}`), {
+        cache: "no-store",
+        headers: {
+            Accept: "application/json",
+        },
+    });
 }
 
 async function getLocalMockProducts(): Promise<HomeProduct[] | null> {
