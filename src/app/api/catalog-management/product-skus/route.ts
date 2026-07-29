@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     });
     const payload = await readBackendJson(response);
 
-    return NextResponse.json(payload, { status: response.status });
+    return NextResponse.json(payload, { status: response.status === 204 ? 200 : response.status });
 }
 
 export async function DELETE(request: Request) {
@@ -79,5 +79,5 @@ export async function DELETE(request: Request) {
     });
     const payload = await readBackendJson(response);
 
-    return NextResponse.json(payload, { status: response.status });
+    return NextResponse.json(payload, { status: response.status === 204 ? 200 : response.status });
 }

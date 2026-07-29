@@ -28,5 +28,27 @@ export async function POST(request: Request) {
     });
     const payload = await readBackendJson(response);
 
-    return NextResponse.json(payload, { status: response.status });
+    return NextResponse.json(payload, { status: response.status === 204 ? 200 : response.status });
+}
+
+export async function DELETE(request: Request) {
+    const manager = await requireCatalogManager();
+
+    if (!manager.ok) {
+        return manager.response;
+    }
+
+    const body = await request.json();
+    const subcategoryId = encodeURIComponent(String(body.id ?? ""));
+    const response = await fetch(getBackendUrl(`/admin/subcategories/${subcategoryId}`), {
+        method: "DELETE",
+        headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${manager.accessToken}`,
+        },
+        cache: "no-store",
+    });
+    const payload = await readBackendJson(response);
+
+    return NextResponse.json(payload, { status: response.status === 204 ? 200 : response.status });
 }

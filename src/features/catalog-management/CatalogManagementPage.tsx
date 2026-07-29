@@ -6,6 +6,7 @@ import {
     Boxes,
     CheckCircle2,
     Layers3,
+    ListChecks,
     LogOut,
     PackagePlus,
     Plus,
@@ -34,13 +35,18 @@ type BrandOption = {
 type SubcategoryOption = {
     id: number;
     name: string;
+    slug?: string;
+    children_count?: number;
+    products_count?: number;
     children?: SubcategoryOption[];
 };
 
 type CategoryOption = {
     id: number;
     name: string;
+    slug?: string;
     description?: string | null;
+    subcategories_count?: number;
     subcategories?: SubcategoryOption[];
 };
 
@@ -57,6 +63,7 @@ type ProductOption = {
     brand?: {
         name?: string | null;
     } | null;
+    subcategories?: SubcategoryOption[];
     skus?: ProductSkuOption[];
 };
 
@@ -118,7 +125,7 @@ type StockDraft = {
     reason: string;
 };
 
-type ViewMode = "overview" | "product" | "sku" | "categories";
+type ViewMode = "overview" | "manage" | "product" | "sku" | "categories";
 
 const emptySku = (): SkuDraft => ({
     id: crypto.randomUUID(),
@@ -167,8 +174,10 @@ export function CatalogManagementPage() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isSearchingProducts, setIsSearchingProducts] = React.useState(false);
+    const [isSearchingManagement, setIsSearchingManagement] = React.useState(false);
     const [isRestocking, setIsRestocking] = React.useState(false);
     const [isDeletingSku, setIsDeletingSku] = React.useState(false);
+    const [isDeletingCatalogItem, setIsDeletingCatalogItem] = React.useState(false);
     const [message, setMessage] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
 
@@ -185,6 +194,8 @@ export function CatalogManagementPage() {
     const [selectedShopCode, setSelectedShopCode] = React.useState("");
     const [productSearch, setProductSearch] = React.useState("");
     const [products, setProducts] = React.useState<ProductOption[]>([]);
+    const [managementSearch, setManagementSearch] = React.useState("");
+    const [managementProducts, setManagementProducts] = React.useState<ProductOption[]>([]);
     const [selectedProductId, setSelectedProductId] = React.useState("");
     const [skuDraft, setSkuDraft] = React.useState<SkuDraft>(emptySku());
     const [skuPrice, setSkuPrice] = React.useState("");
@@ -296,6 +307,13 @@ export function CatalogManagementPage() {
         setError(null);
     }
 
+    function resetManagementView() {
+        setManagementSearch("");
+        setManagementProducts([]);
+        setMessage(null);
+        setError(null);
+    }
+
     function addSelectedSubcategory() {
         const subcategoryId = Number(currentSubcategoryId);
 
@@ -346,6 +364,34 @@ export function CatalogManagementPage() {
             setError(errorMessage(caughtError));
         } finally {
             setIsSearchingProducts(false);
+        }
+    }
+
+    async function searchManagementProducts() {
+        setIsSearchingManagement(true);
+        setError(null);
+
+        try {
+            const params = new URLSearchParams();
+
+            if (managementSearch.trim()) {
+                params.set("search", managementSearch.trim());
+            }
+
+            const response = await fetch(`/api/catalog-management/products?${params}`, {
+                cache: "no-store",
+            });
+            const payload = (await response.json()) as { data?: ProductOption[]; message?: string };
+
+            if (!response.ok) {
+                throw new Error(payload.message ?? "Nao foi possivel buscar produtos.");
+            }
+
+            setManagementProducts(payload.data ?? []);
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsSearchingManagement(false);
         }
     }
 
@@ -551,6 +597,7 @@ export function CatalogManagementPage() {
 
             setMessage("SKU excluido com sucesso.");
             setProducts((current) => removeProductSku(current, sku.sku));
+            setManagementProducts((current) => removeProductSku(current, sku.sku));
             setCreatedSku((current) => (current?.sku === sku.sku ? null : current));
             setSkuDraft(emptySku());
             setSkuPrice("");
@@ -558,6 +605,101 @@ export function CatalogManagementPage() {
             setError(errorMessage(caughtError));
         } finally {
             setIsDeletingSku(false);
+        }
+    }
+
+    async function deleteProduct(product: ProductOption) {
+        setIsDeletingCatalogItem(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/products", {
+                method: "DELETE",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ id: product.id }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setMessage("Produto excluido com sucesso.");
+            setManagementProducts((current) => current.filter((item) => item.id !== product.id));
+            setProducts((current) => current.filter((item) => item.id !== product.id));
+            setSelectedProductId((current) => (current === String(product.id) ? "" : current));
+            setCreatedProduct((current) => (current?.id === product.id ? null : current));
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsDeletingCatalogItem(false);
+        }
+    }
+
+    async function deleteCategory(category: CategoryOption) {
+        setIsDeletingCatalogItem(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/categories", {
+                method: "DELETE",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ id: category.id }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setMessage("Categoria excluida com sucesso.");
+            setCategories((current) => current.filter((item) => item.id !== category.id));
+            setCurrentCategoryId((current) => (current === String(category.id) ? "" : current));
+            setSubcategoryCategoryId((current) => (current === String(category.id) ? "" : current));
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsDeletingCatalogItem(false);
+        }
+    }
+
+    async function deleteSubcategory(subcategory: SubcategoryOption) {
+        setIsDeletingCatalogItem(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/subcategories", {
+                method: "DELETE",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ id: subcategory.id }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setMessage("Subcategoria excluida com sucesso.");
+            setCategories((current) => removeSubcategoryFromCategories(current, subcategory.id));
+            setSelectedSubcategories((current) => current.filter((id) => id !== subcategory.id));
+            setCurrentSubcategoryId((current) => (current === String(subcategory.id) ? "" : current));
+            setSubcategoryParentId((current) => (current === String(subcategory.id) ? "" : current));
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsDeletingCatalogItem(false);
         }
     }
 
@@ -680,6 +822,15 @@ export function CatalogManagementPage() {
                             onClick={() => setMode("overview")}
                         />
                         <NavButton
+                            active={mode === "manage"}
+                            icon={ListChecks}
+                            label="Gerenciar catalogo"
+                            onClick={() => {
+                                resetManagementView();
+                                setMode("manage");
+                            }}
+                        />
+                        <NavButton
                             active={mode === "product"}
                             icon={PackagePlus}
                             label="Adicionar produto"
@@ -739,6 +890,17 @@ export function CatalogManagementPage() {
 
                             {mode === "overview" ? (
                                 <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetManagementView();
+                                            setMode("manage");
+                                        }}
+                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                                    >
+                                        <ListChecks className="h-4 w-4" />
+                                        Gerenciar
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -805,6 +967,30 @@ export function CatalogManagementPage() {
                                     resetCategoryForm();
                                     setMode("categories");
                                 }}
+                                onManageCatalog={() => {
+                                    resetManagementView();
+                                    setMode("manage");
+                                }}
+                            />
+                        )}
+
+                        {mode === "manage" && (
+                            <ManagementView
+                                categories={categories}
+                                shops={shops}
+                                products={managementProducts}
+                                search={managementSearch}
+                                selectedShopCode={selectedShopCode}
+                                isSearching={isSearchingManagement}
+                                isDeletingItem={isDeletingCatalogItem}
+                                isDeletingSku={isDeletingSku}
+                                onSearchChange={setManagementSearch}
+                                onShopChange={setSelectedShopCode}
+                                onSearchProducts={searchManagementProducts}
+                                onDeleteProduct={deleteProduct}
+                                onDeleteCategory={deleteCategory}
+                                onDeleteSubcategory={deleteSubcategory}
+                                onDeleteSku={deleteSku}
                             />
                         )}
 
@@ -1261,6 +1447,296 @@ function NavButton({
             <Icon className="h-4 w-4" />
             {label}
         </button>
+    );
+}
+
+function ManagementView({
+    categories,
+    shops,
+    products,
+    search,
+    selectedShopCode,
+    isSearching,
+    isDeletingItem,
+    isDeletingSku,
+    onSearchChange,
+    onShopChange,
+    onSearchProducts,
+    onDeleteProduct,
+    onDeleteCategory,
+    onDeleteSubcategory,
+    onDeleteSku,
+}: {
+    categories: CategoryOption[];
+    shops: ShopOption[];
+    products: ProductOption[];
+    search: string;
+    selectedShopCode: string;
+    isSearching: boolean;
+    isDeletingItem: boolean;
+    isDeletingSku: boolean;
+    onSearchChange: (value: string) => void;
+    onShopChange: (value: string) => void;
+    onSearchProducts: () => void;
+    onDeleteProduct: (product: ProductOption) => void;
+    onDeleteCategory: (category: CategoryOption) => void;
+    onDeleteSubcategory: (subcategory: SubcategoryOption) => void;
+    onDeleteSku: (sku: ProductSkuOption) => void;
+}) {
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
+            <div className="grid gap-5">
+                <Panel icon={Search} title="Produtos e SKUs" action="Consulta">
+                    <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto]">
+                        <Field label="Buscar produto ou SKU">
+                            <input
+                                value={search}
+                                onChange={(event) => onSearchChange(event.target.value)}
+                                className={inputClass}
+                                placeholder="Nome, descricao, SKU ou codigo de barras"
+                            />
+                        </Field>
+
+                        <Field label="Loja para SKU">
+                            <select
+                                value={selectedShopCode}
+                                onChange={(event) => onShopChange(event.target.value)}
+                                className={inputClass}
+                            >
+                                {shops.map((shop) => (
+                                    <option key={shop.id} value={shop.code}>
+                                        {shop.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+
+                        <button
+                            type="button"
+                            onClick={onSearchProducts}
+                            disabled={isSearching}
+                            className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70 lg:mt-6"
+                        >
+                            {isSearching ? (
+                                <RefreshCcw className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Search className="h-4 w-4" />
+                            )}
+                            Buscar
+                        </button>
+                    </div>
+
+                    <div className="grid gap-3">
+                        {products.length === 0 ? (
+                            <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-4 text-sm font-bold text-zinc-500">
+                                Nenhum produto listado. Use a busca para carregar produtos.
+                            </div>
+                        ) : (
+                            products.map((product) => (
+                                <div
+                                    key={product.id}
+                                    className="grid gap-4 rounded-[8px] border border-zinc-200 bg-zinc-50 p-4"
+                                >
+                                    <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-base font-black text-zinc-950">
+                                                {product.name}
+                                            </p>
+                                            <p className="mt-1 text-xs font-bold text-zinc-500">
+                                                Produto #{product.id}
+                                                {product.brand?.name ? ` | ${product.brand.name}` : ""}
+                                                {product.skus ? ` | ${product.skus.length} SKU(s)` : ""}
+                                            </p>
+                                            {product.subcategories && product.subcategories.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    {product.subcategories.map((subcategory) => (
+                                                        <span
+                                                            key={subcategory.id}
+                                                            className="rounded-[4px] bg-white px-2 py-1 text-xs font-black text-zinc-500"
+                                                        >
+                                                            {subcategory.name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (window.confirm(`Apagar o produto "${product.name}"?`)) {
+                                                    onDeleteProduct(product);
+                                                }
+                                            }}
+                                            disabled={isDeletingItem}
+                                            className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-red-200 bg-white px-3 text-sm font-extrabold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
+                                        >
+                                            {isDeletingItem ? (
+                                                <RefreshCcw className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="h-4 w-4" />
+                                            )}
+                                            Apagar produto
+                                        </button>
+                                    </div>
+
+                                    <ProductSkuList
+                                        product={product}
+                                        isDeleting={isDeletingSku}
+                                        onDeleteSku={(sku) => {
+                                            if (window.confirm(`Apagar o SKU "${sku.sku}"?`)) {
+                                                onDeleteSku(sku);
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </Panel>
+            </div>
+
+            <aside className="grid h-fit gap-5 xl:sticky xl:top-5">
+                <Panel icon={Layers3} title="Categorias e subcategorias" action="Remover">
+                    {categories.length === 0 ? (
+                        <p className="text-sm font-semibold text-zinc-500">
+                            Nenhuma categoria cadastrada.
+                        </p>
+                    ) : (
+                        <div className="grid max-h-[720px] gap-3 overflow-auto pr-1">
+                            {categories.map((category) => (
+                                <CategoryManagementItem
+                                    key={category.id}
+                                    category={category}
+                                    isDeleting={isDeletingItem}
+                                    onDeleteCategory={onDeleteCategory}
+                                    onDeleteSubcategory={onDeleteSubcategory}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </Panel>
+            </aside>
+        </div>
+    );
+}
+
+function CategoryManagementItem({
+    category,
+    isDeleting,
+    onDeleteCategory,
+    onDeleteSubcategory,
+}: {
+    category: CategoryOption;
+    isDeleting: boolean;
+    onDeleteCategory: (category: CategoryOption) => void;
+    onDeleteSubcategory: (subcategory: SubcategoryOption) => void;
+}) {
+    const subcategories = category.subcategories ?? [];
+
+    return (
+        <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-zinc-950">{category.name}</p>
+                    <p className="mt-1 text-xs font-bold text-zinc-500">
+                        {flattenSubcategories(subcategories).length} subcategoria(s)
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (window.confirm(`Apagar a categoria "${category.name}"?`)) {
+                            onDeleteCategory(category);
+                        }
+                    }}
+                    disabled={isDeleting}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-[6px] border border-red-200 bg-white text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
+                    aria-label="Apagar categoria"
+                    title="Apagar categoria"
+                >
+                    {isDeleting ? (
+                        <RefreshCcw className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Trash2 className="h-4 w-4" />
+                    )}
+                </button>
+            </div>
+
+            {subcategories.length > 0 && (
+                <div className="mt-3 grid gap-2">
+                    {subcategories.map((subcategory) => (
+                        <SubcategoryManagementItem
+                            key={subcategory.id}
+                            subcategory={subcategory}
+                            isDeleting={isDeleting}
+                            onDeleteSubcategory={onDeleteSubcategory}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function SubcategoryManagementItem({
+    subcategory,
+    isDeleting,
+    onDeleteSubcategory,
+}: {
+    subcategory: SubcategoryOption;
+    isDeleting: boolean;
+    onDeleteSubcategory: (subcategory: SubcategoryOption) => void;
+}) {
+    const children = subcategory.children ?? [];
+
+    return (
+        <div className="rounded-[6px] border border-zinc-200 bg-white p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-zinc-900">
+                        {subcategory.name}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-zinc-500">
+                        {children.length} filha(s)
+                        {subcategory.products_count !== undefined
+                            ? ` | ${subcategory.products_count} produto(s)`
+                            : ""}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (window.confirm(`Apagar a subcategoria "${subcategory.name}"?`)) {
+                            onDeleteSubcategory(subcategory);
+                        }
+                    }}
+                    disabled={isDeleting}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
+                    aria-label="Apagar subcategoria"
+                    title="Apagar subcategoria"
+                >
+                    {isDeleting ? (
+                        <RefreshCcw className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Trash2 className="h-4 w-4" />
+                    )}
+                </button>
+            </div>
+
+            {children.length > 0 && (
+                <div className="mt-2 grid gap-2 border-l border-zinc-200 pl-3">
+                    {children.map((child) => (
+                        <SubcategoryManagementItem
+                            key={child.id}
+                            subcategory={child}
+                            isDeleting={isDeleting}
+                            onDeleteSubcategory={onDeleteSubcategory}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -1743,6 +2219,7 @@ function Overview({
     onCreateCategory,
     onCreateProduct,
     onCreateSku,
+    onManageCatalog,
 }: {
     brandsCount: number;
     categoriesCount: number;
@@ -1750,6 +2227,7 @@ function Overview({
     onCreateCategory: () => void;
     onCreateProduct: () => void;
     onCreateSku: () => void;
+    onManageCatalog: () => void;
 }) {
     return (
         <div className="grid gap-5">
@@ -1759,7 +2237,26 @@ function Overview({
                 <Metric icon={Warehouse} label="Lojas acessiveis" value={shopsCount} />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-4">
+                <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <h2 className="text-lg font-black text-zinc-950">
+                            Gerenciar catalogo
+                        </h2>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-zinc-600">
+                            Lista produtos, SKUs e categorias existentes para consulta e exclusao.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onManageCatalog}
+                        className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
+                    >
+                        <ListChecks className="h-4 w-4" />
+                        Gerenciar
+                    </button>
+                </section>
+
                 <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
                     <div>
                         <h2 className="text-lg font-black text-zinc-950">
@@ -2007,6 +2504,28 @@ function addChildSubcategory(
             ].sort(byName),
         };
     });
+}
+
+function removeSubcategoryFromCategories(
+    categories: CategoryOption[],
+    subcategoryId: number,
+): CategoryOption[] {
+    return categories.map((category) => ({
+        ...category,
+        subcategories: removeSubcategoryTree(category.subcategories ?? [], subcategoryId),
+    }));
+}
+
+function removeSubcategoryTree(
+    subcategories: SubcategoryOption[],
+    subcategoryId: number,
+): SubcategoryOption[] {
+    return subcategories
+        .filter((subcategory) => subcategory.id !== subcategoryId)
+        .map((subcategory) => ({
+            ...subcategory,
+            children: removeSubcategoryTree(subcategory.children ?? [], subcategoryId),
+        }));
 }
 
 function upsertProductSku(
