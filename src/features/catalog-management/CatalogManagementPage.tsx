@@ -146,6 +146,8 @@ export function CatalogManagementPage() {
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
     const [brandId, setBrandId] = React.useState("");
+    const [currentCategoryId, setCurrentCategoryId] = React.useState("");
+    const [currentSubcategoryId, setCurrentSubcategoryId] = React.useState("");
     const [selectedSubcategories, setSelectedSubcategories] = React.useState<number[]>([]);
     const [specRows, setSpecRows] = React.useState<SpecRow[]>(initialSpecs);
     const [images, setImages] = React.useState<File[]>([]);
@@ -221,6 +223,8 @@ export function CatalogManagementPage() {
         setName("");
         setDescription("");
         setBrandId("");
+        setCurrentCategoryId("");
+        setCurrentSubcategoryId("");
         setSelectedSubcategories([]);
         setSpecRows(initialSpecs());
         setImages([]);
@@ -237,11 +241,20 @@ export function CatalogManagementPage() {
         setError(null);
     }
 
-    function toggleSubcategory(subcategoryId: number) {
+    function addSelectedSubcategory() {
+        const subcategoryId = Number(currentSubcategoryId);
+
+        if (!subcategoryId || selectedSubcategories.includes(subcategoryId)) {
+            return;
+        }
+
+        setSelectedSubcategories((current) => [...current, subcategoryId]);
+        setCurrentSubcategoryId("");
+    }
+
+    function removeSelectedSubcategory(subcategoryId: number) {
         setSelectedSubcategories((current) => (
-            current.includes(subcategoryId)
-                ? current.filter((id) => id !== subcategoryId)
-                : [...current, subcategoryId]
+            current.filter((id) => id !== subcategoryId)
         ));
     }
 
@@ -264,6 +277,10 @@ export function CatalogManagementPage() {
         setMessage(null);
 
         try {
+            if (selectedSubcategories.length === 0) {
+                throw new Error("Selecione pelo menos uma categoria e subcategoria do catalogo.");
+            }
+
             const productResponse = await fetch("/api/catalog-management/products", {
                 method: "POST",
                 headers: {
@@ -531,84 +548,142 @@ export function CatalogManagementPage() {
                                         </Field>
                                     </Panel>
 
-                                    <Panel icon={Layers3} title="Setor e especificacoes" action="Catalogo">
+                                    <Panel icon={Layers3} title="Organizacao no catalogo" action="Setor">
                                         <div className="grid gap-4">
-                                            <div>
-                                                <p className="text-sm font-extrabold text-zinc-800">
-                                                    Categoria / subcategoria
-                                                </p>
-                                                <div className="mt-3 grid gap-3">
-                                                    {categories.map((category) => (
-                                                        <div
-                                                            key={category.id}
-                                                            className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3"
-                                                        >
-                                                            <p className="text-sm font-black text-zinc-950">
+                                            <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                                                <Field label="Categoria">
+                                                    <select
+                                                        value={currentCategoryId}
+                                                        onChange={(event) => {
+                                                            setCurrentCategoryId(event.target.value);
+                                                            setCurrentSubcategoryId("");
+                                                        }}
+                                                        className={inputClass}
+                                                    >
+                                                        <option value="">Selecione</option>
+                                                        {categories.map((category) => (
+                                                            <option key={category.id} value={category.id}>
                                                                 {category.name}
-                                                            </p>
-                                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                                {flattenSubcategories(category.subcategories ?? []).map(
-                                                                    (subcategory) => (
-                                                                        <label
-                                                                            key={subcategory.id}
-                                                                            className="inline-flex cursor-pointer items-center gap-2 rounded-[6px] border border-zinc-200 bg-white px-3 py-2 text-sm font-bold text-zinc-700 transition-colors has-[:checked]:border-zinc-950 has-[:checked]:bg-zinc-950 has-[:checked]:text-white"
-                                                                        >
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={selectedSubcategories.includes(
-                                                                                    subcategory.id,
-                                                                                )}
-                                                                                onChange={() => toggleSubcategory(subcategory.id)}
-                                                                                className="h-4 w-4 accent-[#FFD900]"
-                                                                            />
-                                                                            {subcategory.name}
-                                                                        </label>
-                                                                    ),
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
 
-                                            <div className="grid gap-3">
-                                                {specRows.map((row) => (
-                                                    <div key={row.id} className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
-                                                        <input
-                                                            value={row.label}
-                                                            onChange={(event) => updateSpec(row.id, "label", event.target.value)}
-                                                            className={inputClass}
-                                                            placeholder="Especificacao"
-                                                        />
-                                                        <input
-                                                            value={row.value}
-                                                            onChange={(event) => updateSpec(row.id, "value", event.target.value)}
-                                                            className={inputClass}
-                                                            placeholder="Valor"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setSpecRows((current) => current.filter((item) => item.id !== row.id))}
-                                                            className="grid h-11 w-11 place-items-center rounded-[6px] border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                                                            aria-label="Remover especificacao"
-                                                            title="Remover especificacao"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                <Field label="Subcategoria">
+                                                    <select
+                                                        value={currentSubcategoryId}
+                                                        onChange={(event) => setCurrentSubcategoryId(event.target.value)}
+                                                        disabled={!currentCategoryId}
+                                                        className={inputClass}
+                                                    >
+                                                        <option value="">
+                                                            {currentCategoryId ? "Selecione" : "Escolha uma categoria"}
+                                                        </option>
+                                                        {subcategoriesForCategory(categories, currentCategoryId)
+                                                            .map((subcategory) => (
+                                                                <option key={subcategory.id} value={subcategory.id}>
+                                                                    {subcategory.name}
+                                                                </option>
+                                                            ))}
+                                                    </select>
+                                                </Field>
+
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSpecRows((current) => [
-                                                        ...current,
-                                                        { id: crypto.randomUUID(), label: "", value: "" },
-                                                    ])}
-                                                    className="inline-flex h-10 w-fit items-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                                                    onClick={addSelectedSubcategory}
+                                                    disabled={!currentSubcategoryId}
+                                                    className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 md:mt-6"
                                                 >
                                                     <Plus className="h-4 w-4" />
-                                                    Adicionar especificacao
+                                                    Adicionar
                                                 </button>
                                             </div>
+
+                                            <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3">
+                                                <p className="text-sm font-black text-zinc-900">
+                                                    Vinculos selecionados
+                                                </p>
+
+                                                {selectedSubcategories.length === 0 ? (
+                                                    <p className="mt-2 text-sm font-semibold text-zinc-500">
+                                                        Nenhuma categoria/subcategoria selecionada.
+                                                    </p>
+                                                ) : (
+                                                    <div className="mt-3 grid gap-2">
+                                                        {selectedSubcategories.map((subcategoryId) => {
+                                                            const match = findSubcategoryInCategories(
+                                                                categories,
+                                                                subcategoryId,
+                                                            );
+
+                                                            return (
+                                                                <div
+                                                                    key={subcategoryId}
+                                                                    className="flex items-center justify-between gap-3 rounded-[6px] border border-zinc-200 bg-white px-3 py-2"
+                                                                >
+                                                                    <span className="min-w-0 text-sm font-bold text-zinc-700">
+                                                                        <strong className="text-zinc-950">
+                                                                            {match?.category.name ?? "Categoria"}
+                                                                        </strong>
+                                                                        {" / "}
+                                                                        {match?.subcategory.name ?? `Subcategoria #${subcategoryId}`}
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => removeSelectedSubcategory(subcategoryId)}
+                                                                        className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-700"
+                                                                        aria-label="Remover vinculo"
+                                                                        title="Remover vinculo"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Panel>
+
+                                    <Panel icon={CheckCircle2} title="Especificacoes tecnicas" action="Ficha">
+                                        <div className="grid gap-3">
+                                            {specRows.map((row) => (
+                                                <div key={row.id} className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
+                                                    <input
+                                                        value={row.label}
+                                                        onChange={(event) => updateSpec(row.id, "label", event.target.value)}
+                                                        className={inputClass}
+                                                        placeholder="Especificacao"
+                                                    />
+                                                    <input
+                                                        value={row.value}
+                                                        onChange={(event) => updateSpec(row.id, "value", event.target.value)}
+                                                        className={inputClass}
+                                                        placeholder="Valor"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSpecRows((current) => current.filter((item) => item.id !== row.id))}
+                                                        className="grid h-11 w-11 place-items-center rounded-[6px] border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                                        aria-label="Remover especificacao"
+                                                        title="Remover especificacao"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => setSpecRows((current) => [
+                                                    ...current,
+                                                    { id: crypto.randomUUID(), label: "", value: "" },
+                                                ])}
+                                                className="inline-flex h-10 w-fit items-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Adicionar especificacao
+                                            </button>
                                         </div>
                                     </Panel>
 
@@ -1068,6 +1143,31 @@ function flattenSubcategories(subcategories: SubcategoryOption[]): SubcategoryOp
         subcategory,
         ...flattenSubcategories(subcategory.children ?? []),
     ]);
+}
+
+function subcategoriesForCategory(
+    categories: CategoryOption[],
+    categoryId: string,
+): SubcategoryOption[] {
+    const category = categories.find((item) => String(item.id) === categoryId);
+
+    return flattenSubcategories(category?.subcategories ?? []);
+}
+
+function findSubcategoryInCategories(
+    categories: CategoryOption[],
+    subcategoryId: number,
+): { category: CategoryOption; subcategory: SubcategoryOption } | null {
+    for (const category of categories) {
+        const subcategory = flattenSubcategories(category.subcategories ?? [])
+            .find((item) => item.id === subcategoryId);
+
+        if (subcategory) {
+            return { category, subcategory };
+        }
+    }
+
+    return null;
 }
 
 function specificationsPayload(rows: SpecRow[]) {
