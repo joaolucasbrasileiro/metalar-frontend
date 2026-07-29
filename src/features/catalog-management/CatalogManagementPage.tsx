@@ -57,6 +57,16 @@ type ProductOption = {
     brand?: {
         name?: string | null;
     } | null;
+    skus?: ProductSkuOption[];
+};
+
+type ProductSkuOption = {
+    id: number;
+    sku: string;
+    barcode?: string | null;
+    variant_name?: string | null;
+    unit: string;
+    total_available?: string | number | null;
 };
 
 type OptionsPayload = {
@@ -432,6 +442,8 @@ export function CatalogManagementPage() {
                 throw new Error(responseMessage(skuPayload));
             }
 
+            const createdSkuData = skuPayload.data;
+
             const priceResponse = await fetch("/api/catalog-management/prices", {
                 method: "PUT",
                 headers: {
@@ -440,7 +452,7 @@ export function CatalogManagementPage() {
                 },
                 body: JSON.stringify({
                     shop_code: selectedShopCode,
-                    sku: skuPayload.data.sku,
+                    sku: createdSkuData.sku,
                     price: skuPrice,
                 }),
             });
@@ -450,7 +462,13 @@ export function CatalogManagementPage() {
                 throw new Error(responseMessage(pricePayload));
             }
 
-            setCreatedSku(skuPayload.data);
+            setCreatedSku(createdSkuData);
+            setProducts((current) => upsertProductSku(current, Number(selectedProductId), {
+                id: createdSkuData.id,
+                sku: createdSkuData.sku,
+                variant_name: createdSkuData.variant_name,
+                unit: createdSkuData.unit,
+            }));
             setMessage("SKU criado e preco aplicado na loja selecionada.");
         } catch (caughtError) {
             setError(errorMessage(caughtError));
@@ -504,8 +522,8 @@ export function CatalogManagementPage() {
         }
     }
 
-    async function deleteCreatedSku() {
-        if (!createdSku) {
+    async function deleteSku(sku: ProductSkuOption | CreatedSku) {
+        if (!sku.sku) {
             return;
         }
 
@@ -522,7 +540,7 @@ export function CatalogManagementPage() {
                 },
                 body: JSON.stringify({
                     shop_code: selectedShopCode,
-                    sku: createdSku.sku,
+                    sku: sku.sku,
                 }),
             });
             const payload = await response.json();
@@ -532,7 +550,8 @@ export function CatalogManagementPage() {
             }
 
             setMessage("SKU excluido com sucesso.");
-            setCreatedSku(null);
+            setProducts((current) => removeProductSku(current, sku.sku));
+            setCreatedSku((current) => (current?.sku === sku.sku ? null : current));
             setSkuDraft(emptySku());
             setSkuPrice("");
         } catch (caughtError) {
@@ -1102,6 +1121,14 @@ export function CatalogManagementPage() {
                                                 ))}
                                             </select>
                                         </Field>
+
+                                        <ProductSkuList
+                                            product={products.find((product) => (
+                                                String(product.id) === selectedProductId
+                                            )) ?? null}
+                                            isDeleting={isDeletingSku}
+                                            onDeleteSku={deleteSku}
+                                        />
                                     </Panel>
 
                                     <SkuFields
@@ -1153,7 +1180,7 @@ export function CatalogManagementPage() {
 
                                                     <button
                                                         type="button"
-                                                        onClick={deleteCreatedSku}
+                                                        onClick={() => deleteSku(createdSku)}
                                                         disabled={isDeletingSku}
                                                         className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-red-200 bg-white px-3 text-sm font-extrabold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
                                                     >
@@ -1598,6 +1625,84 @@ function SkuFields({
     );
 }
 
+function ProductSkuList({
+    product,
+    isDeleting,
+    onDeleteSku,
+}: {
+    product: ProductOption | null;
+    isDeleting: boolean;
+    onDeleteSku: (sku: ProductSkuOption) => void;
+}) {
+    if (!product) {
+        return (
+            <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-4 text-sm font-bold text-zinc-500">
+                Pesquise e selecione um produto para ver os SKUs vinculados.
+            </div>
+        );
+    }
+
+    const skus = product.skus ?? [];
+
+    return (
+        <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-sm font-black text-zinc-950">
+                        SKUs deste produto
+                    </p>
+                    <p className="text-xs font-bold text-zinc-500">
+                        {product.name}
+                    </p>
+                </div>
+                <span className="rounded-[4px] bg-white px-2 py-1 text-xs font-black text-zinc-500">
+                    {skus.length} SKU(s)
+                </span>
+            </div>
+
+            {skus.length === 0 ? (
+                <p className="mt-3 text-sm font-semibold text-zinc-500">
+                    Nenhum SKU cadastrado para este produto.
+                </p>
+            ) : (
+                <div className="mt-3 grid gap-2">
+                    {skus.map((sku) => (
+                        <div
+                            key={sku.id}
+                            className="grid gap-3 rounded-[6px] border border-zinc-200 bg-white p-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                        >
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-black text-zinc-950">
+                                    {sku.variant_name || sku.sku}
+                                </p>
+                                <p className="mt-1 text-xs font-bold text-zinc-500">
+                                    SKU {sku.sku} | {unitLabel(sku.unit)}
+                                    {sku.total_available !== undefined && sku.total_available !== null
+                                        ? ` | estoque: ${sku.total_available}`
+                                        : ""}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onDeleteSku(sku)}
+                                disabled={isDeleting}
+                                className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-red-200 bg-white px-3 text-sm font-extrabold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
+                            >
+                                {isDeleting ? (
+                                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                )}
+                                Apagar
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ActionBar({
     title,
     description,
@@ -1902,6 +2007,39 @@ function addChildSubcategory(
             ].sort(byName),
         };
     });
+}
+
+function upsertProductSku(
+    products: ProductOption[],
+    productId: number,
+    sku: ProductSkuOption,
+): ProductOption[] {
+    return products.map((product) => {
+        if (product.id !== productId) {
+            return product;
+        }
+
+        const existingSkus = product.skus ?? [];
+        const nextSkus = existingSkus.some((item) => item.sku === sku.sku)
+            ? existingSkus.map((item) => (item.sku === sku.sku ? { ...item, ...sku } : item))
+            : [...existingSkus, sku];
+
+        return {
+            ...product,
+            skus: nextSkus.sort(bySku),
+        };
+    });
+}
+
+function removeProductSku(products: ProductOption[], skuCode: string): ProductOption[] {
+    return products.map((product) => ({
+        ...product,
+        skus: (product.skus ?? []).filter((sku) => sku.sku !== skuCode),
+    }));
+}
+
+function bySku(first: ProductSkuOption, second: ProductSkuOption) {
+    return first.sku.localeCompare(second.sku, "pt-BR");
 }
 
 function byName<T extends { name: string }>(first: T, second: T) {
