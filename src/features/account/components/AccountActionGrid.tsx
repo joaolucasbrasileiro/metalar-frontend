@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { Boxes } from "lucide-react";
 
 import { accountActions } from "../data";
+import type { AccountUser } from "./AccountDashboard";
 
-export function AccountActionGrid() {
+export function AccountActionGrid({ user }: { user: AccountUser }) {
+    const canManageCatalog = user.role === "moderator" || user.role === "admin";
+
     return (
         <section>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -17,6 +21,25 @@ export function AccountActionGrid() {
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {canManageCatalog && (
+                    <Link
+                        href="/painel/catalogo"
+                        className="flex min-h-[120px] gap-4 rounded-[8px] border border-zinc-900 bg-zinc-950 p-5 text-white transition-colors hover:bg-zinc-800"
+                    >
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[6px] bg-[#FFD900] text-zinc-950">
+                            <Boxes className="h-6 w-6" strokeWidth={2.2} />
+                        </span>
+                        <span className="min-w-0">
+                            <strong className="text-sm font-extrabold">
+                                Gestao de catalogo
+                            </strong>
+                            <span className="mt-1 block text-sm font-medium leading-relaxed text-zinc-300">
+                                Produtos, SKUs e reestoque.
+                            </span>
+                        </span>
+                    </Link>
+                )}
+
                 {accountActions.map((action) => {
                     const Icon = action.icon;
                     const content = (

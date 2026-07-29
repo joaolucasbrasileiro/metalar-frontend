@@ -122,7 +122,7 @@ export function AccountDashboard() {
                     />
                 </div>
 
-                {activeView === "actions" && <AccountActionGrid />}
+                {activeView === "actions" && <AccountActionGrid user={user} />}
 
                 {activeView === "profile" && (
                     <AccountProfileForm
