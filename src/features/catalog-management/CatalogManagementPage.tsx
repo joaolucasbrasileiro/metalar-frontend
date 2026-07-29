@@ -128,6 +128,21 @@ const initialSpecs = (): SpecRow[] => [
     { id: crypto.randomUUID(), label: "Garantia", value: "" },
 ];
 
+const unitOptions = [
+    { value: "un", label: "Unidade" },
+    { value: "saco", label: "Saco" },
+    { value: "caixa", label: "Caixa" },
+    { value: "pacote", label: "Pacote" },
+    { value: "metro", label: "Metro" },
+    { value: "kg", label: "Quilo" },
+    { value: "litro", label: "Litro" },
+    { value: "barra", label: "Barra" },
+    { value: "rolo", label: "Rolo" },
+    { value: "par", label: "Par" },
+    { value: "m2", label: "Metro quadrado" },
+    { value: "m3", label: "Metro cubico" },
+];
+
 function isCatalogManager(role?: string | null) {
     return role === "moderator" || role === "admin";
 }
@@ -143,6 +158,7 @@ export function CatalogManagementPage() {
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [isSearchingProducts, setIsSearchingProducts] = React.useState(false);
     const [isRestocking, setIsRestocking] = React.useState(false);
+    const [isDeletingSku, setIsDeletingSku] = React.useState(false);
     const [message, setMessage] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
 
@@ -485,6 +501,44 @@ export function CatalogManagementPage() {
             setError(errorMessage(caughtError));
         } finally {
             setIsRestocking(false);
+        }
+    }
+
+    async function deleteCreatedSku() {
+        if (!createdSku) {
+            return;
+        }
+
+        setIsDeletingSku(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/product-skus", {
+                method: "DELETE",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    shop_code: selectedShopCode,
+                    sku: createdSku.sku,
+                }),
+            });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setMessage("SKU excluido com sucesso.");
+            setCreatedSku(null);
+            setSkuDraft(emptySku());
+            setSkuPrice("");
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsDeletingSku(false);
         }
     }
 
@@ -1059,7 +1113,7 @@ export function CatalogManagementPage() {
 
                                     <ActionBar
                                         title="Cadastro de SKU"
-                                        description="Cria o SKU para o produto selecionado e aplica o preco na loja escolhida."
+                                        description="Cria o SKU para o produto selecionado e aplica o preco por unidade na loja escolhida."
                                         isSubmitting={isSubmitting}
                                         label="Salvar SKU e preco"
                                     />
@@ -1076,11 +1130,12 @@ export function CatalogManagementPage() {
                                             value={products.find((product) => String(product.id) === selectedProductId)?.name ?? "Pendente"}
                                         />
                                         <SummaryLine label="SKU" value={skuDraft.sku || "Pendente"} />
-                                        <SummaryLine label="Preco" value={skuPrice ? `R$ ${skuPrice}` : "Pendente"} />
+                                        <SummaryLine label="Unidade de venda" value={unitLabel(skuDraft.unit)} />
+                                        <SummaryLine label="Preco por unidade" value={skuPrice ? `R$ ${skuPrice}` : "Pendente"} />
                                     </Panel>
 
                                     <form onSubmit={submitStock}>
-                                        <Panel icon={Warehouse} title="Estoque inicial" action="Opcional">
+                                        <Panel icon={Warehouse} title="Estoque da loja selecionada" action="Opcional">
                                             {!createdSku ? (
                                                 <div className="rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
                                                     Salve o SKU com preco para liberar o estoque inicial.
@@ -1096,7 +1151,21 @@ export function CatalogManagementPage() {
                                                         </p>
                                                     </div>
 
-                                                    <Field label="Quantidade">
+                                                    <button
+                                                        type="button"
+                                                        onClick={deleteCreatedSku}
+                                                        disabled={isDeletingSku}
+                                                        className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-red-200 bg-white px-3 text-sm font-extrabold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-70"
+                                                    >
+                                                        {isDeletingSku ? (
+                                                            <RefreshCcw className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-4 w-4" />
+                                                        )}
+                                                        Excluir SKU
+                                                    </button>
+
+                                                    <Field label="Quantidade em estoque">
                                                         <input
                                                             value={stockDraft.quantity}
                                                             onChange={(event) => setStockDraft((draft) => ({
@@ -1110,7 +1179,7 @@ export function CatalogManagementPage() {
                                                         />
                                                     </Field>
 
-                                                    <Field label="Motivo">
+                                                    <Field label="Motivo da entrada">
                                                         <input
                                                             value={stockDraft.reason}
                                                             onChange={(event) => setStockDraft((draft) => ({
@@ -1458,16 +1527,21 @@ function SkuFields({
                         placeholder="789..."
                     />
                 </Field>
-                <Field label="Unidade">
-                    <input
+                <Field label="Unidade de venda">
+                    <select
                         value={sku.unit}
                         onChange={(event) => onSkuChange("unit", event.target.value)}
                         required
                         className={inputClass}
-                        placeholder="un, saco, caixa"
-                    />
+                    >
+                        {unitOptions.map((unit) => (
+                            <option key={unit.value} value={unit.value}>
+                                {unit.label}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
-                <Field label="Preco de venda">
+                <Field label="Preco por unidade de venda">
                     <input
                         value={price}
                         onChange={(event) => onPriceChange(event.target.value)}
@@ -1855,6 +1929,10 @@ function skuNumberPayload(sku: SkuDraft) {
         transfer_batch_quantity: 1,
         transfer_fee_per_batch: 0,
     };
+}
+
+function unitLabel(value: string) {
+    return unitOptions.find((unit) => unit.value === value)?.label ?? (value || "Pendente");
 }
 
 function responseMessage(payload: unknown) {
