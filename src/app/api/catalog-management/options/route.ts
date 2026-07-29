@@ -21,7 +21,7 @@ export async function GET() {
     const [brandsResponse, categoriesResponse, shopsResponse] = await Promise.all([
         fetch(getBackendUrl("/brands"), { headers, cache: "no-store" }),
         fetch(getBackendUrl("/categories"), { headers, cache: "no-store" }),
-        fetch(getBackendUrl("/shops"), { headers, cache: "no-store" }),
+        fetch(getBackendUrl("/staff/shops"), { headers, cache: "no-store" }),
     ]);
 
     const [brands, categories, shops] = await Promise.all([

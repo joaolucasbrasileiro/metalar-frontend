@@ -11,6 +11,8 @@ import {
     Plus,
     RefreshCcw,
     Save,
+    Search,
+    Tag,
     Trash2,
     Upload,
     Warehouse,
@@ -47,6 +49,15 @@ type ShopOption = {
     name: string;
 };
 
+type ProductOption = {
+    id: number;
+    name: string;
+    slug: string;
+    brand?: {
+        name?: string | null;
+    } | null;
+};
+
 type OptionsPayload = {
     brands?: BrandOption[];
     categories?: CategoryOption[];
@@ -55,17 +66,7 @@ type OptionsPayload = {
 };
 
 type ProductPayload = {
-    data?: {
-        id: number;
-        name: string;
-        slug: string;
-    };
-    message?: string;
-    errors?: Record<string, string[]>;
-};
-
-type SkuPayload = {
-    data?: CreatedSku;
+    data?: ProductOption;
     message?: string;
     errors?: Record<string, string[]>;
 };
@@ -75,6 +76,12 @@ type CreatedSku = {
     sku: string;
     variant_name?: string | null;
     unit: string;
+};
+
+type SkuPayload = {
+    data?: CreatedSku;
+    message?: string;
+    errors?: Record<string, string[]>;
 };
 
 type SpecRow = {
@@ -93,18 +100,14 @@ type SkuDraft = {
     length: string;
     width: string;
     height: string;
-    transfer_batch_quantity: string;
-    transfer_fee_per_batch: string;
 };
 
 type StockDraft = {
-    shop_code: string;
-    sku: string;
     quantity: string;
     reason: string;
 };
 
-type ViewMode = "overview" | "create";
+type ViewMode = "overview" | "product" | "sku";
 
 const emptySku = (): SkuDraft => ({
     id: crypto.randomUUID(),
@@ -116,8 +119,6 @@ const emptySku = (): SkuDraft => ({
     length: "",
     width: "",
     height: "",
-    transfer_batch_quantity: "1",
-    transfer_fee_per_batch: "0",
 });
 
 const initialSpecs = (): SpecRow[] => [
@@ -136,12 +137,13 @@ export function CatalogManagementPage() {
     const [brands, setBrands] = React.useState<BrandOption[]>([]);
     const [categories, setCategories] = React.useState<CategoryOption[]>([]);
     const [shops, setShops] = React.useState<ShopOption[]>([]);
-    const [isLoading, setIsLoading] = React.useState(true);
     const [mode, setMode] = React.useState<ViewMode>("overview");
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isSearchingProducts, setIsSearchingProducts] = React.useState(false);
+    const [isRestocking, setIsRestocking] = React.useState(false);
     const [message, setMessage] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [isRestocking, setIsRestocking] = React.useState(false);
 
     const [name, setName] = React.useState("");
     const [description, setDescription] = React.useState("");
@@ -151,14 +153,16 @@ export function CatalogManagementPage() {
     const [selectedSubcategories, setSelectedSubcategories] = React.useState<number[]>([]);
     const [specRows, setSpecRows] = React.useState<SpecRow[]>(initialSpecs);
     const [images, setImages] = React.useState<File[]>([]);
-    const [skus, setSkus] = React.useState<SkuDraft[]>([emptySku()]);
-    const [createdProduct, setCreatedProduct] = React.useState<ProductPayload["data"] | null>(
-        null,
-    );
-    const [createdSkus, setCreatedSkus] = React.useState<CreatedSku[]>([]);
+    const [createdProduct, setCreatedProduct] = React.useState<ProductOption | null>(null);
+
+    const [selectedShopCode, setSelectedShopCode] = React.useState("");
+    const [productSearch, setProductSearch] = React.useState("");
+    const [products, setProducts] = React.useState<ProductOption[]>([]);
+    const [selectedProductId, setSelectedProductId] = React.useState("");
+    const [skuDraft, setSkuDraft] = React.useState<SkuDraft>(emptySku());
+    const [skuPrice, setSkuPrice] = React.useState("");
+    const [createdSku, setCreatedSku] = React.useState<CreatedSku | null>(null);
     const [stockDraft, setStockDraft] = React.useState<StockDraft>({
-        shop_code: "",
-        sku: "",
         quantity: "",
         reason: "Estoque inicial",
     });
@@ -196,10 +200,7 @@ export function CatalogManagementPage() {
                     setBrands(optionsPayload.brands ?? []);
                     setCategories(optionsPayload.categories ?? []);
                     setShops(optionsPayload.shops ?? []);
-                    setStockDraft((draft) => ({
-                        ...draft,
-                        shop_code: optionsPayload.shops?.[0]?.code ?? "",
-                    }));
+                    setSelectedShopCode(optionsPayload.shops?.[0]?.code ?? "");
                 }
             } catch (caughtError) {
                 if (isMounted) {
@@ -219,7 +220,7 @@ export function CatalogManagementPage() {
         };
     }, [router]);
 
-    function resetForm() {
+    function resetProductForm() {
         setName("");
         setDescription("");
         setBrandId("");
@@ -228,12 +229,19 @@ export function CatalogManagementPage() {
         setSelectedSubcategories([]);
         setSpecRows(initialSpecs());
         setImages([]);
-        setSkus([emptySku()]);
         setCreatedProduct(null);
-        setCreatedSkus([]);
+        setMessage(null);
+        setError(null);
+    }
+
+    function resetSkuForm() {
+        setProductSearch("");
+        setProducts([]);
+        setSelectedProductId("");
+        setSkuDraft(emptySku());
+        setSkuPrice("");
+        setCreatedSku(null);
         setStockDraft({
-            shop_code: shops[0]?.code ?? "",
-            sku: "",
             quantity: "",
             reason: "Estoque inicial",
         });
@@ -253,9 +261,7 @@ export function CatalogManagementPage() {
     }
 
     function removeSelectedSubcategory(subcategoryId: number) {
-        setSelectedSubcategories((current) => (
-            current.filter((id) => id !== subcategoryId)
-        ));
+        setSelectedSubcategories((current) => current.filter((id) => id !== subcategoryId));
     }
 
     function updateSpec(rowId: string, field: "label" | "value", value: string) {
@@ -264,10 +270,36 @@ export function CatalogManagementPage() {
         )));
     }
 
-    function updateSku(rowId: string, field: keyof SkuDraft, value: string) {
-        setSkus((current) => current.map((sku) => (
-            sku.id === rowId ? { ...sku, [field]: value } : sku
-        )));
+    function updateSku(field: keyof SkuDraft, value: string) {
+        setSkuDraft((current) => ({ ...current, [field]: value }));
+    }
+
+    async function searchProducts() {
+        setIsSearchingProducts(true);
+        setError(null);
+
+        try {
+            const params = new URLSearchParams();
+
+            if (productSearch.trim()) {
+                params.set("search", productSearch.trim());
+            }
+
+            const response = await fetch(`/api/catalog-management/products?${params}`, {
+                cache: "no-store",
+            });
+            const payload = (await response.json()) as { data?: ProductOption[]; message?: string };
+
+            if (!response.ok) {
+                throw new Error(payload.message ?? "Nao foi possivel buscar produtos.");
+            }
+
+            setProducts(payload.data ?? []);
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsSearchingProducts(false);
+        }
     }
 
     async function submitProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -320,36 +352,69 @@ export function CatalogManagementPage() {
                 }
             }
 
-            const createdSkuResponses: CreatedSku[] = [];
+            setCreatedProduct(productPayload.data);
+            setProducts((current) => [productPayload.data!, ...current]);
+            setSelectedProductId(String(productPayload.data.id));
+            setMessage("Produto cadastrado. Use Adicionar SKU para escolher loja, preco e estoque.");
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
 
-            for (const sku of skus.filter((draft) => draft.sku.trim() && draft.unit.trim())) {
-                const skuResponse = await fetch("/api/catalog-management/product-skus", {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        product_id: productPayload.data.id,
-                        ...skuNumberPayload(sku),
-                    }),
-                });
-                const skuPayload = (await skuResponse.json()) as SkuPayload;
+    async function submitSku(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+        setMessage(null);
 
-                if (!skuResponse.ok || !skuPayload.data) {
-                    throw new Error(responseMessage(skuPayload));
-                }
-
-                createdSkuResponses.push(skuPayload.data);
+        try {
+            if (!selectedShopCode) {
+                throw new Error("Selecione a loja em que esse SKU sera vendido.");
             }
 
-            setCreatedProduct(productPayload.data);
-            setCreatedSkus(createdSkuResponses);
-            setStockDraft((draft) => ({
-                ...draft,
-                sku: createdSkuResponses[0]?.sku ?? "",
-            }));
-            setMessage("Produto cadastrado. SKUs disponiveis para reestoque.");
+            if (!selectedProductId) {
+                throw new Error("Pesquise e selecione um produto existente.");
+            }
+
+            const skuResponse = await fetch("/api/catalog-management/product-skus", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    product_id: Number(selectedProductId),
+                    ...skuNumberPayload(skuDraft),
+                }),
+            });
+            const skuPayload = (await skuResponse.json()) as SkuPayload;
+
+            if (!skuResponse.ok || !skuPayload.data) {
+                throw new Error(responseMessage(skuPayload));
+            }
+
+            const priceResponse = await fetch("/api/catalog-management/prices", {
+                method: "PUT",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    shop_code: selectedShopCode,
+                    sku: skuPayload.data.sku,
+                    price: skuPrice,
+                }),
+            });
+            const pricePayload = await priceResponse.json();
+
+            if (!priceResponse.ok) {
+                throw new Error(responseMessage(pricePayload));
+            }
+
+            setCreatedSku(skuPayload.data);
+            setMessage("SKU criado e preco aplicado na loja selecionada.");
         } catch (caughtError) {
             setError(errorMessage(caughtError));
         } finally {
@@ -364,13 +429,22 @@ export function CatalogManagementPage() {
         setMessage(null);
 
         try {
+            if (!createdSku) {
+                throw new Error("Crie o SKU e aplique o preco antes de registrar estoque.");
+            }
+
             const response = await fetch("/api/catalog-management/stock-adjustments", {
                 method: "POST",
                 headers: {
                     Accept: "application/json",
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(stockDraft),
+                body: JSON.stringify({
+                    shop_code: selectedShopCode,
+                    sku: createdSku.sku,
+                    quantity: stockDraft.quantity,
+                    reason: stockDraft.reason,
+                }),
             });
             const payload = await response.json();
 
@@ -379,11 +453,13 @@ export function CatalogManagementPage() {
             }
 
             setMessage("Reestoque registrado com sucesso.");
-            setStockDraft((draft) => ({
-                ...draft,
+            setCreatedSku(null);
+            setSkuDraft(emptySku());
+            setSkuPrice("");
+            setStockDraft({
                 quantity: "",
-                reason: "Reposicao",
-            }));
+                reason: "Estoque inicial",
+            });
         } catch (caughtError) {
             setError(errorMessage(caughtError));
         } finally {
@@ -416,25 +492,30 @@ export function CatalogManagementPage() {
                     </div>
 
                     <nav className="mt-8 grid gap-2">
-                        <button
-                            type="button"
+                        <NavButton
+                            active={mode === "overview"}
+                            icon={Layers3}
+                            label="Visao geral"
                             onClick={() => setMode("overview")}
-                            className={navClass(mode === "overview")}
-                        >
-                            <Layers3 className="h-4 w-4" />
-                            Visao geral
-                        </button>
-                        <button
-                            type="button"
+                        />
+                        <NavButton
+                            active={mode === "product"}
+                            icon={PackagePlus}
+                            label="Adicionar produto"
                             onClick={() => {
-                                resetForm();
-                                setMode("create");
+                                resetProductForm();
+                                setMode("product");
                             }}
-                            className={navClass(mode === "create")}
-                        >
-                            <PackagePlus className="h-4 w-4" />
-                            Novo produto
-                        </button>
+                        />
+                        <NavButton
+                            active={mode === "sku"}
+                            icon={Tag}
+                            label="Adicionar SKU"
+                            onClick={() => {
+                                resetSkuForm();
+                                setMode("sku");
+                            }}
+                        />
                     </nav>
 
                     <div className="mt-8 rounded-[8px] border border-zinc-800 bg-zinc-900 p-4">
@@ -462,11 +543,36 @@ export function CatalogManagementPage() {
                                     Catalogo interno
                                 </p>
                                 <h1 className="mt-1 text-2xl font-black tracking-normal text-zinc-950">
-                                    Produtos, SKUs e reestoque
+                                    Produtos e SKUs por loja
                                 </h1>
                             </div>
 
-                            {mode === "create" ? (
+                            {mode === "overview" ? (
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetProductForm();
+                                            setMode("product");
+                                        }}
+                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                                    >
+                                        <PackagePlus className="h-4 w-4" />
+                                        Produto
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetSkuForm();
+                                            setMode("sku");
+                                        }}
+                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
+                                    >
+                                        <Tag className="h-4 w-4" />
+                                        SKU
+                                    </button>
+                                </div>
+                            ) : (
                                 <button
                                     type="button"
                                     onClick={() => setMode("overview")}
@@ -475,484 +581,220 @@ export function CatalogManagementPage() {
                                     <ArrowLeft className="h-4 w-4" />
                                     Voltar
                                 </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        resetForm();
-                                        setMode("create");
-                                    }}
-                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    Adicionar novo produto
-                                </button>
                             )}
                         </header>
 
                         {error && <Notice tone="error" message={error} />}
                         {message && <Notice tone="success" message={message} />}
 
-                        {mode === "overview" ? (
+                        {mode === "overview" && (
                             <Overview
                                 brandsCount={brands.length}
                                 categoriesCount={categories.length}
                                 shopsCount={shops.length}
-                                onCreate={() => {
-                                    resetForm();
-                                    setMode("create");
+                                onCreateProduct={() => {
+                                    resetProductForm();
+                                    setMode("product");
+                                }}
+                                onCreateSku={() => {
+                                    resetSkuForm();
+                                    setMode("sku");
                                 }}
                             />
-                        ) : (
+                        )}
+
+                        {mode === "product" && (
                             <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
                                 <form onSubmit={submitProduct} className="grid gap-5">
-                                    <Panel
-                                        icon={PackagePlus}
-                                        title="Dados do produto"
-                                        action="Produto"
-                                    >
-                                        <div className="grid gap-4 md:grid-cols-2">
-                                            <Field label="Nome do produto">
-                                                <input
-                                                    value={name}
-                                                    onChange={(event) => setName(event.target.value)}
-                                                    required
-                                                    minLength={2}
-                                                    className={inputClass}
-                                                    placeholder="Ex.: Cimento CP II 50kg"
-                                                />
-                                            </Field>
-                                            <Field label="Marca">
-                                                <select
-                                                    value={brandId}
-                                                    onChange={(event) => setBrandId(event.target.value)}
-                                                    className={inputClass}
-                                                >
-                                                    <option value="">Sem marca</option>
-                                                    {brands.map((brand) => (
-                                                        <option key={brand.id} value={brand.id}>
-                                                            {brand.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-                                        </div>
+                                    <ProductFields
+                                        brands={brands}
+                                        categories={categories}
+                                        name={name}
+                                        description={description}
+                                        brandId={brandId}
+                                        currentCategoryId={currentCategoryId}
+                                        currentSubcategoryId={currentSubcategoryId}
+                                        selectedSubcategories={selectedSubcategories}
+                                        specRows={specRows}
+                                        images={images}
+                                        onNameChange={setName}
+                                        onDescriptionChange={setDescription}
+                                        onBrandChange={setBrandId}
+                                        onCategoryChange={(value) => {
+                                            setCurrentCategoryId(value);
+                                            setCurrentSubcategoryId("");
+                                        }}
+                                        onSubcategoryChange={setCurrentSubcategoryId}
+                                        onAddSubcategory={addSelectedSubcategory}
+                                        onRemoveSubcategory={removeSelectedSubcategory}
+                                        onSpecChange={updateSpec}
+                                        onAddSpec={() => setSpecRows((current) => [
+                                            ...current,
+                                            { id: crypto.randomUUID(), label: "", value: "" },
+                                        ])}
+                                        onRemoveSpec={(rowId) => setSpecRows((current) => (
+                                            current.filter((row) => row.id !== rowId)
+                                        ))}
+                                        onImagesChange={setImages}
+                                    />
 
-                                        <Field label="Descricao">
-                                            <textarea
-                                                value={description}
-                                                onChange={(event) => setDescription(event.target.value)}
-                                                className={`${inputClass} min-h-[120px] resize-y py-3`}
-                                                placeholder="Resumo comercial e tecnico do produto"
-                                            />
-                                        </Field>
-                                    </Panel>
-
-                                    <Panel icon={Layers3} title="Organizacao no catalogo" action="Setor">
-                                        <div className="grid gap-4">
-                                            <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                                                <Field label="Categoria">
-                                                    <select
-                                                        value={currentCategoryId}
-                                                        onChange={(event) => {
-                                                            setCurrentCategoryId(event.target.value);
-                                                            setCurrentSubcategoryId("");
-                                                        }}
-                                                        className={inputClass}
-                                                    >
-                                                        <option value="">Selecione</option>
-                                                        {categories.map((category) => (
-                                                            <option key={category.id} value={category.id}>
-                                                                {category.name}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </Field>
-
-                                                <Field label="Subcategoria">
-                                                    <select
-                                                        value={currentSubcategoryId}
-                                                        onChange={(event) => setCurrentSubcategoryId(event.target.value)}
-                                                        disabled={!currentCategoryId}
-                                                        className={inputClass}
-                                                    >
-                                                        <option value="">
-                                                            {currentCategoryId ? "Selecione" : "Escolha uma categoria"}
-                                                        </option>
-                                                        {subcategoriesForCategory(categories, currentCategoryId)
-                                                            .map((subcategory) => (
-                                                                <option key={subcategory.id} value={subcategory.id}>
-                                                                    {subcategory.name}
-                                                                </option>
-                                                            ))}
-                                                    </select>
-                                                </Field>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={addSelectedSubcategory}
-                                                    disabled={!currentSubcategoryId}
-                                                    className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 md:mt-6"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                    Adicionar
-                                                </button>
-                                            </div>
-
-                                            <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3">
-                                                <p className="text-sm font-black text-zinc-900">
-                                                    Vinculos selecionados
-                                                </p>
-
-                                                {selectedSubcategories.length === 0 ? (
-                                                    <p className="mt-2 text-sm font-semibold text-zinc-500">
-                                                        Nenhuma categoria/subcategoria selecionada.
-                                                    </p>
-                                                ) : (
-                                                    <div className="mt-3 grid gap-2">
-                                                        {selectedSubcategories.map((subcategoryId) => {
-                                                            const match = findSubcategoryInCategories(
-                                                                categories,
-                                                                subcategoryId,
-                                                            );
-
-                                                            return (
-                                                                <div
-                                                                    key={subcategoryId}
-                                                                    className="flex items-center justify-between gap-3 rounded-[6px] border border-zinc-200 bg-white px-3 py-2"
-                                                                >
-                                                                    <span className="min-w-0 text-sm font-bold text-zinc-700">
-                                                                        <strong className="text-zinc-950">
-                                                                            {match?.category.name ?? "Categoria"}
-                                                                        </strong>
-                                                                        {" / "}
-                                                                        {match?.subcategory.name ?? `Subcategoria #${subcategoryId}`}
-                                                                    </span>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => removeSelectedSubcategory(subcategoryId)}
-                                                                        className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-700"
-                                                                        aria-label="Remover vinculo"
-                                                                        title="Remover vinculo"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </button>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </Panel>
-
-                                    <Panel icon={CheckCircle2} title="Especificacoes tecnicas" action="Ficha">
-                                        <div className="grid gap-3">
-                                            {specRows.map((row) => (
-                                                <div key={row.id} className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
-                                                    <input
-                                                        value={row.label}
-                                                        onChange={(event) => updateSpec(row.id, "label", event.target.value)}
-                                                        className={inputClass}
-                                                        placeholder="Especificacao"
-                                                    />
-                                                    <input
-                                                        value={row.value}
-                                                        onChange={(event) => updateSpec(row.id, "value", event.target.value)}
-                                                        className={inputClass}
-                                                        placeholder="Valor"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setSpecRows((current) => current.filter((item) => item.id !== row.id))}
-                                                        className="grid h-11 w-11 place-items-center rounded-[6px] border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-                                                        aria-label="Remover especificacao"
-                                                        title="Remover especificacao"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            <button
-                                                type="button"
-                                                onClick={() => setSpecRows((current) => [
-                                                    ...current,
-                                                    { id: crypto.randomUUID(), label: "", value: "" },
-                                                ])}
-                                                className="inline-flex h-10 w-fit items-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-extrabold transition-colors hover:bg-zinc-50"
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                                Adicionar especificacao
-                                            </button>
-                                        </div>
-                                    </Panel>
-
-                                    <Panel icon={Upload} title="Fotos do produto" action="Midia">
-                                        <label className="flex min-h-[118px] cursor-pointer flex-col items-center justify-center rounded-[8px] border border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 text-center transition-colors hover:border-zinc-500 hover:bg-white">
-                                            <Upload className="h-7 w-7 text-zinc-500" />
-                                            <span className="mt-2 text-sm font-extrabold text-zinc-800">
-                                                Selecionar fotos
-                                            </span>
-                                            <span className="mt-1 text-xs font-semibold text-zinc-500">
-                                                JPG, PNG ou WEBP
-                                            </span>
-                                            <input
-                                                type="file"
-                                                accept="image/jpeg,image/png,image/webp"
-                                                multiple
-                                                onChange={(event) => setImages(Array.from(event.target.files ?? []))}
-                                                className="sr-only"
-                                            />
-                                        </label>
-
-                                        {images.length > 0 && (
-                                            <div className="grid gap-2">
-                                                {images.map((image, index) => (
-                                                    <div
-                                                        key={`${image.name}-${image.lastModified}`}
-                                                        className="flex items-center justify-between rounded-[6px] border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                                    >
-                                                        <span className="truncate font-bold text-zinc-700">
-                                                            {index + 1}. {image.name}
-                                                        </span>
-                                                        {index === 0 && (
-                                                            <span className="rounded-[4px] bg-[#fff3b8] px-2 py-1 text-xs font-black text-zinc-900">
-                                                                Principal
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </Panel>
-
-                                    <Panel icon={Boxes} title="SKUs e variedades" action="Variedades">
-                                        <div className="grid gap-4">
-                                            {skus.map((sku, index) => (
-                                                <div
-                                                    key={sku.id}
-                                                    className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-4"
-                                                >
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <p className="text-sm font-black text-zinc-900">
-                                                            SKU {index + 1}
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setSkus((current) => current.filter((item) => item.id !== sku.id))}
-                                                            disabled={skus.length === 1}
-                                                            className="grid h-9 w-9 place-items-center rounded-[6px] border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                                            aria-label="Remover SKU"
-                                                            title="Remover SKU"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-
-                                                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                                                        <Field label="Variedade">
-                                                            <input
-                                                                value={sku.variant_name}
-                                                                onChange={(event) => updateSku(sku.id, "variant_name", event.target.value)}
-                                                                className={inputClass}
-                                                                placeholder="Ex.: Saco 50kg"
-                                                            />
-                                                        </Field>
-                                                        <Field label="SKU">
-                                                            <input
-                                                                value={sku.sku}
-                                                                onChange={(event) => updateSku(sku.id, "sku", event.target.value)}
-                                                                required={index === 0}
-                                                                className={inputClass}
-                                                                placeholder="CIM-VOT-50"
-                                                            />
-                                                        </Field>
-                                                        <Field label="Codigo de barras">
-                                                            <input
-                                                                value={sku.barcode}
-                                                                onChange={(event) => updateSku(sku.id, "barcode", event.target.value)}
-                                                                className={inputClass}
-                                                                placeholder="789..."
-                                                            />
-                                                        </Field>
-                                                        <Field label="Unidade">
-                                                            <input
-                                                                value={sku.unit}
-                                                                onChange={(event) => updateSku(sku.id, "unit", event.target.value)}
-                                                                required={index === 0}
-                                                                className={inputClass}
-                                                                placeholder="un, saco, caixa"
-                                                            />
-                                                        </Field>
-                                                        <Field label="Peso">
-                                                            <input
-                                                                value={sku.weight}
-                                                                onChange={(event) => updateSku(sku.id, "weight", event.target.value)}
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.001"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                        <Field label="Comp.">
-                                                            <input
-                                                                value={sku.length}
-                                                                onChange={(event) => updateSku(sku.id, "length", event.target.value)}
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.001"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                        <Field label="Largura">
-                                                            <input
-                                                                value={sku.width}
-                                                                onChange={(event) => updateSku(sku.id, "width", event.target.value)}
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.001"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                        <Field label="Altura">
-                                                            <input
-                                                                value={sku.height}
-                                                                onChange={(event) => updateSku(sku.id, "height", event.target.value)}
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.001"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                        <Field label="Lote transf.">
-                                                            <input
-                                                                value={sku.transfer_batch_quantity}
-                                                                onChange={(event) => updateSku(sku.id, "transfer_batch_quantity", event.target.value)}
-                                                                type="number"
-                                                                min="0.001"
-                                                                step="0.001"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                        <Field label="Taxa lote">
-                                                            <input
-                                                                value={sku.transfer_fee_per_batch}
-                                                                onChange={(event) => updateSku(sku.id, "transfer_fee_per_batch", event.target.value)}
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.01"
-                                                                className={inputClass}
-                                                            />
-                                                        </Field>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <button
-                                                type="button"
-                                                onClick={() => setSkus((current) => [...current, emptySku()])}
-                                                className="inline-flex h-10 w-fit items-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-extrabold transition-colors hover:bg-zinc-50"
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                                Adicionar SKU
-                                            </button>
-                                        </div>
-                                    </Panel>
-
-                                    <div className="sticky bottom-0 z-10 flex flex-col gap-3 border border-zinc-200 bg-white/95 p-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-sm font-black text-zinc-900">
-                                                Cadastro de produto
-                                            </p>
-                                            <p className="text-xs font-semibold text-zinc-500">
-                                                Produto, fotos e SKUs serao salvos juntos.
-                                            </p>
-                                        </div>
-                                        <button
-                                            type="submit"
-                                            disabled={isSubmitting}
-                                            className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-5 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70"
-                                        >
-                                            {isSubmitting ? (
-                                                <RefreshCcw className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Save className="h-4 w-4" />
-                                            )}
-                                            Salvar produto
-                                        </button>
-                                    </div>
+                                    <ActionBar
+                                        title="Cadastro de produto"
+                                        description="Salva apenas o produto-base, fotos, categorias e ficha tecnica."
+                                        isSubmitting={isSubmitting}
+                                        label="Salvar produto"
+                                    />
                                 </form>
 
                                 <aside className="grid h-fit gap-5 xl:sticky xl:top-5">
-                                    <Panel icon={CheckCircle2} title="Resumo" action="Status">
+                                    <Panel icon={CheckCircle2} title="Resumo" action="Produto">
                                         <SummaryLine label="Produto" value={name || "Pendente"} />
                                         <SummaryLine
                                             label="Marca"
                                             value={brands.find((brand) => String(brand.id) === brandId)?.name ?? "Sem marca"}
                                         />
                                         <SummaryLine
-                                            label="Setores"
-                                            value={`${selectedSubcategories.length} selecionado(s)`}
+                                            label="Categorias"
+                                            value={`${selectedSubcategories.length} vinculo(s)`}
                                         />
                                         <SummaryLine label="Fotos" value={`${images.length}`} />
+                                    </Panel>
+
+                                    {createdProduct && (
+                                        <Panel icon={Tag} title="Proximo passo" action="SKU">
+                                            <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 p-3">
+                                                <p className="text-sm font-black text-emerald-950">
+                                                    {createdProduct.name}
+                                                </p>
+                                                <p className="text-xs font-bold text-emerald-700">
+                                                    Produto #{createdProduct.id}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    resetSkuForm();
+                                                    setProducts([createdProduct]);
+                                                    setSelectedProductId(String(createdProduct.id));
+                                                    setMode("sku");
+                                                }}
+                                                className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
+                                            >
+                                                <Tag className="h-4 w-4" />
+                                                Criar SKU desse produto
+                                            </button>
+                                        </Panel>
+                                    )}
+                                </aside>
+                            </div>
+                        )}
+
+                        {mode === "sku" && (
+                            <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+                                <form onSubmit={submitSku} className="grid gap-5">
+                                    <Panel icon={Warehouse} title="Loja e produto" action="Origem">
+                                        <Field label="Loja">
+                                            <select
+                                                value={selectedShopCode}
+                                                onChange={(event) => setSelectedShopCode(event.target.value)}
+                                                required
+                                                className={inputClass}
+                                            >
+                                                {shops.map((shop) => (
+                                                    <option key={shop.id} value={shop.code}>
+                                                        {shop.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </Field>
+
+                                        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                            <Field label="Pesquisar produto">
+                                                <input
+                                                    value={productSearch}
+                                                    onChange={(event) => setProductSearch(event.target.value)}
+                                                    className={inputClass}
+                                                    placeholder="Nome, descricao ou SKU existente"
+                                                />
+                                            </Field>
+                                            <button
+                                                type="button"
+                                                onClick={searchProducts}
+                                                disabled={isSearchingProducts}
+                                                className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50 disabled:cursor-wait disabled:opacity-70 md:mt-6"
+                                            >
+                                                {isSearchingProducts ? (
+                                                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Search className="h-4 w-4" />
+                                                )}
+                                                Buscar
+                                            </button>
+                                        </div>
+
+                                        <Field label="Produto">
+                                            <select
+                                                value={selectedProductId}
+                                                onChange={(event) => setSelectedProductId(event.target.value)}
+                                                required
+                                                className={inputClass}
+                                            >
+                                                <option value="">Selecione um produto</option>
+                                                {products.map((product) => (
+                                                    <option key={product.id} value={product.id}>
+                                                        {product.name}
+                                                        {product.brand?.name ? ` - ${product.brand.name}` : ""}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </Field>
+                                    </Panel>
+
+                                    <SkuFields
+                                        sku={skuDraft}
+                                        price={skuPrice}
+                                        onSkuChange={updateSku}
+                                        onPriceChange={setSkuPrice}
+                                    />
+
+                                    <ActionBar
+                                        title="Cadastro de SKU"
+                                        description="Cria o SKU para o produto selecionado e aplica o preco na loja escolhida."
+                                        isSubmitting={isSubmitting}
+                                        label="Salvar SKU e preco"
+                                    />
+                                </form>
+
+                                <aside className="grid h-fit gap-5 xl:sticky xl:top-5">
+                                    <Panel icon={CheckCircle2} title="Resumo" action="SKU">
                                         <SummaryLine
-                                            label="SKUs"
-                                            value={`${skus.filter((sku) => sku.sku.trim()).length}`}
+                                            label="Loja"
+                                            value={shops.find((shop) => shop.code === selectedShopCode)?.name ?? "Pendente"}
                                         />
+                                        <SummaryLine
+                                            label="Produto"
+                                            value={products.find((product) => String(product.id) === selectedProductId)?.name ?? "Pendente"}
+                                        />
+                                        <SummaryLine label="SKU" value={skuDraft.sku || "Pendente"} />
+                                        <SummaryLine label="Preco" value={skuPrice ? `R$ ${skuPrice}` : "Pendente"} />
                                     </Panel>
 
                                     <form onSubmit={submitStock}>
-                                        <Panel icon={Warehouse} title="Reestoque" action="Estoque">
-                                            {!createdProduct ? (
+                                        <Panel icon={Warehouse} title="Estoque inicial" action="Opcional">
+                                            {!createdSku ? (
                                                 <div className="rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
-                                                    Salve o produto para liberar o reestoque.
+                                                    Salve o SKU com preco para liberar o estoque inicial.
                                                 </div>
                                             ) : (
                                                 <div className="grid gap-3">
                                                     <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 p-3">
                                                         <p className="text-sm font-black text-emerald-950">
-                                                            {createdProduct.name}
+                                                            {createdSku.variant_name || createdSku.sku}
                                                         </p>
                                                         <p className="text-xs font-bold text-emerald-700">
-                                                            Produto #{createdProduct.id}
+                                                            SKU {createdSku.sku}
                                                         </p>
                                                     </div>
-
-                                                    <Field label="Loja">
-                                                        <select
-                                                            value={stockDraft.shop_code}
-                                                            onChange={(event) => setStockDraft((draft) => ({
-                                                                ...draft,
-                                                                shop_code: event.target.value,
-                                                            }))}
-                                                            required
-                                                            className={inputClass}
-                                                        >
-                                                            {shops.map((shop) => (
-                                                                <option key={shop.id} value={shop.code}>
-                                                                    {shop.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </Field>
-
-                                                    <Field label="SKU">
-                                                        <select
-                                                            value={stockDraft.sku}
-                                                            onChange={(event) => setStockDraft((draft) => ({
-                                                                ...draft,
-                                                                sku: event.target.value,
-                                                            }))}
-                                                            required
-                                                            className={inputClass}
-                                                        >
-                                                            {createdSkus.map((sku) => (
-                                                                <option key={sku.id} value={sku.sku}>
-                                                                    {sku.variant_name ? `${sku.variant_name} - ` : ""}
-                                                                    {sku.sku}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </Field>
 
                                                     <Field label="Quantidade">
                                                         <input
@@ -983,15 +825,15 @@ export function CatalogManagementPage() {
 
                                                     <button
                                                         type="submit"
-                                                        disabled={isRestocking || createdSkus.length === 0}
-                                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-[#FFD900] px-4 text-sm font-black text-zinc-950 transition-colors hover:bg-[#f2ce00] disabled:cursor-not-allowed disabled:opacity-60"
+                                                        disabled={isRestocking}
+                                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-[#FFD900] px-4 text-sm font-black text-zinc-950 transition-colors hover:bg-[#f2ce00] disabled:cursor-wait disabled:opacity-70"
                                                     >
                                                         {isRestocking ? (
                                                             <RefreshCcw className="h-4 w-4 animate-spin" />
                                                         ) : (
                                                             <Warehouse className="h-4 w-4" />
                                                         )}
-                                                        Registrar reestoque
+                                                        Registrar estoque
                                                     </button>
                                                 </div>
                                             )}
@@ -1007,44 +849,476 @@ export function CatalogManagementPage() {
     );
 }
 
+function NavButton({
+    active,
+    icon: Icon,
+    label,
+    onClick,
+}: {
+    active: boolean;
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    onClick: () => void;
+}) {
+    return (
+        <button type="button" onClick={onClick} className={navClass(active)}>
+            <Icon className="h-4 w-4" />
+            {label}
+        </button>
+    );
+}
+
+function ProductFields({
+    brands,
+    categories,
+    name,
+    description,
+    brandId,
+    currentCategoryId,
+    currentSubcategoryId,
+    selectedSubcategories,
+    specRows,
+    images,
+    onNameChange,
+    onDescriptionChange,
+    onBrandChange,
+    onCategoryChange,
+    onSubcategoryChange,
+    onAddSubcategory,
+    onRemoveSubcategory,
+    onSpecChange,
+    onAddSpec,
+    onRemoveSpec,
+    onImagesChange,
+}: {
+    brands: BrandOption[];
+    categories: CategoryOption[];
+    name: string;
+    description: string;
+    brandId: string;
+    currentCategoryId: string;
+    currentSubcategoryId: string;
+    selectedSubcategories: number[];
+    specRows: SpecRow[];
+    images: File[];
+    onNameChange: (value: string) => void;
+    onDescriptionChange: (value: string) => void;
+    onBrandChange: (value: string) => void;
+    onCategoryChange: (value: string) => void;
+    onSubcategoryChange: (value: string) => void;
+    onAddSubcategory: () => void;
+    onRemoveSubcategory: (subcategoryId: number) => void;
+    onSpecChange: (rowId: string, field: "label" | "value", value: string) => void;
+    onAddSpec: () => void;
+    onRemoveSpec: (rowId: string) => void;
+    onImagesChange: (files: File[]) => void;
+}) {
+    return (
+        <>
+            <Panel icon={PackagePlus} title="Dados do produto" action="Produto">
+                <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Nome do produto">
+                        <input
+                            value={name}
+                            onChange={(event) => onNameChange(event.target.value)}
+                            required
+                            minLength={2}
+                            className={inputClass}
+                            placeholder="Ex.: Cimento CP II"
+                        />
+                    </Field>
+                    <Field label="Marca">
+                        <select
+                            value={brandId}
+                            onChange={(event) => onBrandChange(event.target.value)}
+                            className={inputClass}
+                        >
+                            <option value="">Sem marca</option>
+                            {brands.map((brand) => (
+                                <option key={brand.id} value={brand.id}>
+                                    {brand.name}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                </div>
+
+                <Field label="Descricao">
+                    <textarea
+                        value={description}
+                        onChange={(event) => onDescriptionChange(event.target.value)}
+                        className={`${inputClass} min-h-[120px] resize-y py-3`}
+                        placeholder="Resumo comercial e tecnico do produto"
+                    />
+                </Field>
+            </Panel>
+
+            <Panel icon={Layers3} title="Organizacao no catalogo" action="Setor">
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                    <Field label="Categoria">
+                        <select
+                            value={currentCategoryId}
+                            onChange={(event) => onCategoryChange(event.target.value)}
+                            className={inputClass}
+                        >
+                            <option value="">Selecione</option>
+                            {categories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                    {category.name}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <Field label="Subcategoria">
+                        <select
+                            value={currentSubcategoryId}
+                            onChange={(event) => onSubcategoryChange(event.target.value)}
+                            disabled={!currentCategoryId}
+                            className={inputClass}
+                        >
+                            <option value="">
+                                {currentCategoryId ? "Selecione" : "Escolha uma categoria"}
+                            </option>
+                            {subcategoriesForCategory(categories, currentCategoryId).map((subcategory) => (
+                                <option key={subcategory.id} value={subcategory.id}>
+                                    {subcategory.name}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+
+                    <button
+                        type="button"
+                        onClick={onAddSubcategory}
+                        disabled={!currentSubcategoryId}
+                        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 md:mt-6"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Adicionar
+                    </button>
+                </div>
+
+                <div className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3">
+                    <p className="text-sm font-black text-zinc-900">Vinculos selecionados</p>
+                    {selectedSubcategories.length === 0 ? (
+                        <p className="mt-2 text-sm font-semibold text-zinc-500">
+                            Nenhuma categoria/subcategoria selecionada.
+                        </p>
+                    ) : (
+                        <div className="mt-3 grid gap-2">
+                            {selectedSubcategories.map((subcategoryId) => {
+                                const match = findSubcategoryInCategories(categories, subcategoryId);
+
+                                return (
+                                    <div
+                                        key={subcategoryId}
+                                        className="flex items-center justify-between gap-3 rounded-[6px] border border-zinc-200 bg-white px-3 py-2"
+                                    >
+                                        <span className="min-w-0 text-sm font-bold text-zinc-700">
+                                            <strong className="text-zinc-950">
+                                                {match?.category.name ?? "Categoria"}
+                                            </strong>
+                                            {" / "}
+                                            {match?.subcategory.name ?? `Subcategoria #${subcategoryId}`}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => onRemoveSubcategory(subcategoryId)}
+                                            className="grid h-8 w-8 shrink-0 place-items-center rounded-[6px] text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-700"
+                                            aria-label="Remover vinculo"
+                                            title="Remover vinculo"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </Panel>
+
+            <Panel icon={CheckCircle2} title="Especificacoes tecnicas" action="Ficha">
+                <div className="grid gap-3">
+                    {specRows.map((row) => (
+                        <div key={row.id} className="grid gap-3 md:grid-cols-[0.42fr_1fr_auto]">
+                            <input
+                                value={row.label}
+                                onChange={(event) => onSpecChange(row.id, "label", event.target.value)}
+                                className={inputClass}
+                                placeholder="Especificacao"
+                            />
+                            <input
+                                value={row.value}
+                                onChange={(event) => onSpecChange(row.id, "value", event.target.value)}
+                                className={inputClass}
+                                placeholder="Valor"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => onRemoveSpec(row.id)}
+                                className="grid h-11 w-11 place-items-center rounded-[6px] border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                aria-label="Remover especificacao"
+                                title="Remover especificacao"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    ))}
+                    <button
+                        type="button"
+                        onClick={onAddSpec}
+                        className="inline-flex h-10 w-fit items-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Adicionar especificacao
+                    </button>
+                </div>
+            </Panel>
+
+            <Panel icon={Upload} title="Fotos do produto" action="Midia">
+                <label className="flex min-h-[118px] cursor-pointer flex-col items-center justify-center rounded-[8px] border border-dashed border-zinc-300 bg-zinc-50 px-4 py-5 text-center transition-colors hover:border-zinc-500 hover:bg-white">
+                    <Upload className="h-7 w-7 text-zinc-500" />
+                    <span className="mt-2 text-sm font-extrabold text-zinc-800">
+                        Selecionar fotos
+                    </span>
+                    <span className="mt-1 text-xs font-semibold text-zinc-500">
+                        JPG, PNG ou WEBP
+                    </span>
+                    <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        onChange={(event) => onImagesChange(Array.from(event.target.files ?? []))}
+                        className="sr-only"
+                    />
+                </label>
+
+                {images.length > 0 && (
+                    <div className="grid gap-2">
+                        {images.map((image, index) => (
+                            <div
+                                key={`${image.name}-${image.lastModified}`}
+                                className="flex items-center justify-between rounded-[6px] border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            >
+                                <span className="truncate font-bold text-zinc-700">
+                                    {index + 1}. {image.name}
+                                </span>
+                                {index === 0 && (
+                                    <span className="rounded-[4px] bg-[#fff3b8] px-2 py-1 text-xs font-black text-zinc-900">
+                                        Principal
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Panel>
+        </>
+    );
+}
+
+function SkuFields({
+    sku,
+    price,
+    onSkuChange,
+    onPriceChange,
+}: {
+    sku: SkuDraft;
+    price: string;
+    onSkuChange: (field: keyof SkuDraft, value: string) => void;
+    onPriceChange: (value: string) => void;
+}) {
+    return (
+        <Panel icon={Tag} title="SKU, preco e medidas" action="SKU">
+            <div className="grid gap-3 md:grid-cols-3">
+                <Field label="Variedade">
+                    <input
+                        value={sku.variant_name}
+                        onChange={(event) => onSkuChange("variant_name", event.target.value)}
+                        className={inputClass}
+                        placeholder="Ex.: Saco 50kg"
+                    />
+                </Field>
+                <Field label="SKU">
+                    <input
+                        value={sku.sku}
+                        onChange={(event) => onSkuChange("sku", event.target.value)}
+                        required
+                        className={inputClass}
+                        placeholder="CIM-VOT-50"
+                    />
+                </Field>
+                <Field label="Codigo de barras">
+                    <input
+                        value={sku.barcode}
+                        onChange={(event) => onSkuChange("barcode", event.target.value)}
+                        className={inputClass}
+                        placeholder="789..."
+                    />
+                </Field>
+                <Field label="Unidade">
+                    <input
+                        value={sku.unit}
+                        onChange={(event) => onSkuChange("unit", event.target.value)}
+                        required
+                        className={inputClass}
+                        placeholder="un, saco, caixa"
+                    />
+                </Field>
+                <Field label="Preco de venda">
+                    <input
+                        value={price}
+                        onChange={(event) => onPriceChange(event.target.value)}
+                        required
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        className={inputClass}
+                        placeholder="0.00"
+                    />
+                </Field>
+                <Field label="Peso">
+                    <input
+                        value={sku.weight}
+                        onChange={(event) => onSkuChange("weight", event.target.value)}
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className={inputClass}
+                    />
+                </Field>
+                <Field label="Comprimento">
+                    <input
+                        value={sku.length}
+                        onChange={(event) => onSkuChange("length", event.target.value)}
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className={inputClass}
+                    />
+                </Field>
+                <Field label="Largura">
+                    <input
+                        value={sku.width}
+                        onChange={(event) => onSkuChange("width", event.target.value)}
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className={inputClass}
+                    />
+                </Field>
+                <Field label="Altura">
+                    <input
+                        value={sku.height}
+                        onChange={(event) => onSkuChange("height", event.target.value)}
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className={inputClass}
+                    />
+                </Field>
+            </div>
+        </Panel>
+    );
+}
+
+function ActionBar({
+    title,
+    description,
+    isSubmitting,
+    label,
+}: {
+    title: string;
+    description: string;
+    isSubmitting: boolean;
+    label: string;
+}) {
+    return (
+        <div className="sticky bottom-0 z-10 flex flex-col gap-3 border border-zinc-200 bg-white/95 p-4 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p className="text-sm font-black text-zinc-900">{title}</p>
+                <p className="text-xs font-semibold text-zinc-500">{description}</p>
+            </div>
+            <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-5 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70"
+            >
+                {isSubmitting ? (
+                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                ) : (
+                    <Save className="h-4 w-4" />
+                )}
+                {label}
+            </button>
+        </div>
+    );
+}
+
 function Overview({
     brandsCount,
     categoriesCount,
     shopsCount,
-    onCreate,
+    onCreateProduct,
+    onCreateSku,
 }: {
     brandsCount: number;
     categoriesCount: number;
     shopsCount: number;
-    onCreate: () => void;
+    onCreateProduct: () => void;
+    onCreateSku: () => void;
 }) {
     return (
         <div className="grid gap-5">
             <div className="grid gap-4 md:grid-cols-3">
                 <Metric icon={Boxes} label="Marcas" value={brandsCount} />
                 <Metric icon={Layers3} label="Categorias" value={categoriesCount} />
-                <Metric icon={Warehouse} label="Lojas" value={shopsCount} />
+                <Metric icon={Warehouse} label="Lojas acessiveis" value={shopsCount} />
             </div>
 
-            <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
-                <div>
-                    <h2 className="text-lg font-black text-zinc-950">
-                        Cadastro de novo produto
-                    </h2>
-                    <p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-zinc-600">
-                        O fluxo cadastra o produto, vincula categorias, recebe fotos, cria SKUs e
-                        libera o reestoque inicial.
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    onClick={onCreate}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
-                >
-                    <PackagePlus className="h-4 w-4" />
-                    Adicionar novo produto
-                </button>
-            </section>
+            <div className="grid gap-4 lg:grid-cols-2">
+                <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <h2 className="text-lg font-black text-zinc-950">
+                            Adicionar produto
+                        </h2>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-zinc-600">
+                            Cria o produto-base, vincula categorias reais do site, marca, fotos e
+                            especificacoes tecnicas.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCreateProduct}
+                        className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                    >
+                        <PackagePlus className="h-4 w-4" />
+                        Produto
+                    </button>
+                </section>
+
+                <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <h2 className="text-lg font-black text-zinc-950">
+                            Adicionar SKU
+                        </h2>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-zinc-600">
+                            Seleciona a loja acessivel, pesquisa um produto existente, cria SKU,
+                            aplica preco e registra estoque inicial.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCreateSku}
+                        className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-4 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800"
+                    >
+                        <Tag className="h-4 w-4" />
+                        SKU
+                    </button>
+                </section>
+            </div>
         </div>
     );
 }
@@ -1122,11 +1396,12 @@ function Notice({ tone, message }: { tone: "success" | "error"; message: string 
     const isSuccess = tone === "success";
 
     return (
-        <div className={`flex items-start gap-3 rounded-[8px] border p-4 text-sm font-bold ${
-            isSuccess
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-red-200 bg-red-50 text-red-900"
-        }`}
+        <div
+            className={`flex items-start gap-3 rounded-[8px] border p-4 text-sm font-bold ${
+                isSuccess
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-red-200 bg-red-50 text-red-900"
+            }`}
         >
             {isSuccess ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1188,8 +1463,8 @@ function skuNumberPayload(sku: SkuDraft) {
         length: sku.length,
         width: sku.width,
         height: sku.height,
-        transfer_batch_quantity: sku.transfer_batch_quantity,
-        transfer_fee_per_batch: sku.transfer_fee_per_batch,
+        transfer_batch_quantity: 1,
+        transfer_fee_per_batch: 0,
     };
 }
 
@@ -1220,4 +1495,4 @@ function navClass(isActive: boolean) {
 }
 
 const inputClass =
-    "h-11 w-full rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-950";
+    "h-11 w-full rounded-[6px] border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-950 outline-none transition-colors placeholder:text-zinc-400 focus:border-zinc-950 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-500";
