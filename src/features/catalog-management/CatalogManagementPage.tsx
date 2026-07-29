@@ -40,6 +40,7 @@ type SubcategoryOption = {
 type CategoryOption = {
     id: number;
     name: string;
+    description?: string | null;
     subcategories?: SubcategoryOption[];
 };
 
@@ -107,7 +108,7 @@ type StockDraft = {
     reason: string;
 };
 
-type ViewMode = "overview" | "product" | "sku";
+type ViewMode = "overview" | "product" | "sku" | "categories";
 
 const emptySku = (): SkuDraft => ({
     id: crypto.randomUUID(),
@@ -166,6 +167,12 @@ export function CatalogManagementPage() {
         quantity: "",
         reason: "Estoque inicial",
     });
+    const [categoryName, setCategoryName] = React.useState("");
+    const [categoryDescription, setCategoryDescription] = React.useState("");
+    const [subcategoryCategoryId, setSubcategoryCategoryId] = React.useState("");
+    const [subcategoryParentId, setSubcategoryParentId] = React.useState("");
+    const [subcategoryName, setSubcategoryName] = React.useState("");
+    const [subcategoryDescription, setSubcategoryDescription] = React.useState("");
 
     React.useEffect(() => {
         let isMounted = true;
@@ -201,6 +208,9 @@ export function CatalogManagementPage() {
                     setCategories(optionsPayload.categories ?? []);
                     setShops(optionsPayload.shops ?? []);
                     setSelectedShopCode(optionsPayload.shops?.[0]?.code ?? "");
+                    setSubcategoryCategoryId(optionsPayload.categories?.[0]
+                        ? String(optionsPayload.categories[0].id)
+                        : "");
                 }
             } catch (caughtError) {
                 if (isMounted) {
@@ -245,6 +255,17 @@ export function CatalogManagementPage() {
             quantity: "",
             reason: "Estoque inicial",
         });
+        setMessage(null);
+        setError(null);
+    }
+
+    function resetCategoryForm() {
+        setCategoryName("");
+        setCategoryDescription("");
+        setSubcategoryCategoryId(categories[0] ? String(categories[0].id) : "");
+        setSubcategoryParentId("");
+        setSubcategoryName("");
+        setSubcategoryDescription("");
         setMessage(null);
         setError(null);
     }
@@ -467,6 +488,93 @@ export function CatalogManagementPage() {
         }
     }
 
+    async function submitCategory(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/categories", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name: categoryName,
+                    description: categoryDescription,
+                }),
+            });
+            const payload = (await response.json()) as {
+                data?: CategoryOption;
+                message?: string;
+                errors?: Record<string, string[]>;
+            };
+
+            if (!response.ok || !payload.data) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setCategories((current) => [...current, payload.data!].sort(byName));
+            setCategoryName("");
+            setCategoryDescription("");
+            setSubcategoryCategoryId(String(payload.data.id));
+            setMessage("Categoria criada com sucesso.");
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function submitSubcategory(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const response = await fetch("/api/catalog-management/subcategories", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    category_id: Number(subcategoryCategoryId),
+                    parent_id: subcategoryParentId ? Number(subcategoryParentId) : null,
+                    name: subcategoryName,
+                    description: subcategoryDescription,
+                }),
+            });
+            const payload = (await response.json()) as {
+                data?: SubcategoryOption & { category?: CategoryOption };
+                message?: string;
+                errors?: Record<string, string[]>;
+            };
+
+            if (!response.ok || !payload.data) {
+                throw new Error(responseMessage(payload));
+            }
+
+            setCategories((current) => addSubcategoryToCategories(
+                current,
+                Number(subcategoryCategoryId),
+                subcategoryParentId ? Number(subcategoryParentId) : null,
+                payload.data!,
+            ));
+            setSubcategoryParentId("");
+            setSubcategoryName("");
+            setSubcategoryDescription("");
+            setMessage("Subcategoria criada com sucesso.");
+        } catch (caughtError) {
+            setError(errorMessage(caughtError));
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
     if (isLoading) {
         return (
             <main className="grid min-h-screen place-items-center bg-[#eef1f5] px-6 text-zinc-950">
@@ -516,6 +624,15 @@ export function CatalogManagementPage() {
                                 setMode("sku");
                             }}
                         />
+                        <NavButton
+                            active={mode === "categories"}
+                            icon={Layers3}
+                            label="Categorias"
+                            onClick={() => {
+                                resetCategoryForm();
+                                setMode("categories");
+                            }}
+                        />
                     </nav>
 
                     <div className="mt-8 rounded-[8px] border border-zinc-800 bg-zinc-900 p-4">
@@ -549,6 +666,17 @@ export function CatalogManagementPage() {
 
                             {mode === "overview" ? (
                                 <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetCategoryForm();
+                                            setMode("categories");
+                                        }}
+                                        className="inline-flex h-11 items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                                    >
+                                        <Layers3 className="h-4 w-4" />
+                                        Categorias
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -600,7 +728,179 @@ export function CatalogManagementPage() {
                                     resetSkuForm();
                                     setMode("sku");
                                 }}
+                                onCreateCategory={() => {
+                                    resetCategoryForm();
+                                    setMode("categories");
+                                }}
                             />
+                        )}
+
+                        {mode === "categories" && (
+                            <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+                                <div className="grid gap-5">
+                                    <form onSubmit={submitCategory} className="grid gap-5">
+                                        <Panel icon={Layers3} title="Nova categoria" action="Principal">
+                                            <Field label="Nome da categoria">
+                                                <input
+                                                    value={categoryName}
+                                                    onChange={(event) => setCategoryName(event.target.value)}
+                                                    required
+                                                    minLength={2}
+                                                    className={inputClass}
+                                                    placeholder="Ex.: Materiais de construcao"
+                                                />
+                                            </Field>
+                                            <Field label="Descricao">
+                                                <textarea
+                                                    value={categoryDescription}
+                                                    onChange={(event) => setCategoryDescription(event.target.value)}
+                                                    className={`${inputClass} min-h-[96px] resize-y py-3`}
+                                                    placeholder="Descricao opcional para organizacao interna"
+                                                />
+                                            </Field>
+                                            <button
+                                                type="submit"
+                                                disabled={isSubmitting}
+                                                className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-5 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-wait disabled:opacity-70"
+                                            >
+                                                {isSubmitting ? (
+                                                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-4 w-4" />
+                                                )}
+                                                Criar categoria
+                                            </button>
+                                        </Panel>
+                                    </form>
+
+                                    <form onSubmit={submitSubcategory} className="grid gap-5">
+                                        <Panel icon={Layers3} title="Nova subcategoria" action="Subcategoria">
+                                            <div className="grid gap-4 md:grid-cols-2">
+                                                <Field label="Categoria">
+                                                    <select
+                                                        value={subcategoryCategoryId}
+                                                        onChange={(event) => {
+                                                            setSubcategoryCategoryId(event.target.value);
+                                                            setSubcategoryParentId("");
+                                                        }}
+                                                        required
+                                                        className={inputClass}
+                                                    >
+                                                        <option value="">Selecione</option>
+                                                        {categories.map((category) => (
+                                                            <option key={category.id} value={category.id}>
+                                                                {category.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                                <Field label="Subcategoria pai">
+                                                    <select
+                                                        value={subcategoryParentId}
+                                                        onChange={(event) => setSubcategoryParentId(event.target.value)}
+                                                        disabled={!subcategoryCategoryId}
+                                                        className={inputClass}
+                                                    >
+                                                        <option value="">Nenhuma</option>
+                                                        {rootSubcategoriesForCategory(
+                                                            categories,
+                                                            subcategoryCategoryId,
+                                                        ).map((subcategory) => (
+                                                            <option key={subcategory.id} value={subcategory.id}>
+                                                                {subcategory.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                            </div>
+                                            <Field label="Nome da subcategoria">
+                                                <input
+                                                    value={subcategoryName}
+                                                    onChange={(event) => setSubcategoryName(event.target.value)}
+                                                    required
+                                                    minLength={2}
+                                                    className={inputClass}
+                                                    placeholder="Ex.: Cimentos"
+                                                />
+                                            </Field>
+                                            <Field label="Descricao">
+                                                <textarea
+                                                    value={subcategoryDescription}
+                                                    onChange={(event) => setSubcategoryDescription(event.target.value)}
+                                                    className={`${inputClass} min-h-[96px] resize-y py-3`}
+                                                    placeholder="Descricao opcional"
+                                                />
+                                            </Field>
+                                            <button
+                                                type="submit"
+                                                disabled={isSubmitting || categories.length === 0}
+                                                className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] bg-zinc-950 px-5 text-sm font-extrabold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
+                                                {isSubmitting ? (
+                                                    <RefreshCcw className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Save className="h-4 w-4" />
+                                                )}
+                                                Criar subcategoria
+                                            </button>
+                                        </Panel>
+                                    </form>
+                                </div>
+
+                                <aside className="grid h-fit gap-5 xl:sticky xl:top-5">
+                                    <Panel icon={CheckCircle2} title="Resumo" action="Catalogo">
+                                        <SummaryLine label="Categorias" value={`${categories.length}`} />
+                                        <SummaryLine
+                                            label="Subcategorias"
+                                            value={`${categories.reduce(
+                                                (total, category) => (
+                                                    total + flattenSubcategories(category.subcategories ?? []).length
+                                                ),
+                                                0,
+                                            )}`}
+                                        />
+                                    </Panel>
+
+                                    <Panel icon={Layers3} title="Categorias atuais" action="Lista">
+                                        <div className="grid max-h-[420px] gap-3 overflow-auto pr-1">
+                                            {categories.length === 0 ? (
+                                                <p className="text-sm font-semibold text-zinc-500">
+                                                    Nenhuma categoria cadastrada.
+                                                </p>
+                                            ) : (
+                                                categories.map((category) => (
+                                                    <div
+                                                        key={category.id}
+                                                        className="rounded-[8px] border border-zinc-200 bg-zinc-50 p-3"
+                                                    >
+                                                        <p className="text-sm font-black text-zinc-950">
+                                                            {category.name}
+                                                        </p>
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            {flattenSubcategories(category.subcategories ?? []).length === 0 ? (
+                                                                <span className="text-xs font-bold text-zinc-500">
+                                                                    Sem subcategorias
+                                                                </span>
+                                                            ) : (
+                                                                flattenSubcategories(category.subcategories ?? []).map(
+                                                                    (subcategory) => (
+                                                                        <span
+                                                                            key={subcategory.id}
+                                                                            className="rounded-[4px] bg-white px-2 py-1 text-xs font-bold text-zinc-600"
+                                                                        >
+                                                                            {subcategory.name}
+                                                                        </span>
+                                                                    ),
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </Panel>
+                                </aside>
+                            </div>
                         )}
 
                         {mode === "product" && (
@@ -1261,12 +1561,14 @@ function Overview({
     brandsCount,
     categoriesCount,
     shopsCount,
+    onCreateCategory,
     onCreateProduct,
     onCreateSku,
 }: {
     brandsCount: number;
     categoriesCount: number;
     shopsCount: number;
+    onCreateCategory: () => void;
     onCreateProduct: () => void;
     onCreateSku: () => void;
 }) {
@@ -1278,7 +1580,27 @@ function Overview({
                 <Metric icon={Warehouse} label="Lojas acessiveis" value={shopsCount} />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-3">
+                <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div>
+                        <h2 className="text-lg font-black text-zinc-950">
+                            Criar categorias
+                        </h2>
+                        <p className="mt-1 text-sm font-semibold leading-relaxed text-zinc-600">
+                            Cadastra categorias principais e subcategorias usadas nos selects de
+                            organizacao do produto.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCreateCategory}
+                        className="inline-flex h-11 w-fit items-center justify-center gap-2 rounded-[6px] border border-zinc-300 bg-white px-4 text-sm font-extrabold transition-colors hover:bg-zinc-50"
+                    >
+                        <Layers3 className="h-4 w-4" />
+                        Categorias
+                    </button>
+                </section>
+
                 <section className="grid gap-4 rounded-[8px] border border-zinc-200 bg-white p-5 shadow-sm">
                     <div>
                         <h2 className="text-lg font-black text-zinc-950">
@@ -1429,6 +1751,15 @@ function subcategoriesForCategory(
     return flattenSubcategories(category?.subcategories ?? []);
 }
 
+function rootSubcategoriesForCategory(
+    categories: CategoryOption[],
+    categoryId: string,
+): SubcategoryOption[] {
+    const category = categories.find((item) => String(item.id) === categoryId);
+
+    return category?.subcategories ?? [];
+}
+
 function findSubcategoryInCategories(
     categories: CategoryOption[],
     subcategoryId: number,
@@ -1443,6 +1774,64 @@ function findSubcategoryInCategories(
     }
 
     return null;
+}
+
+function addSubcategoryToCategories(
+    categories: CategoryOption[],
+    categoryId: number,
+    parentId: number | null,
+    subcategory: SubcategoryOption,
+): CategoryOption[] {
+    return categories
+        .map((category) => {
+            if (category.id !== categoryId) {
+                return category;
+            }
+
+            if (!parentId) {
+                return {
+                    ...category,
+                    subcategories: [
+                        ...(category.subcategories ?? []),
+                        { ...subcategory, children: subcategory.children ?? [] },
+                    ].sort(byName),
+                };
+            }
+
+            return {
+                ...category,
+                subcategories: addChildSubcategory(
+                    category.subcategories ?? [],
+                    parentId,
+                    subcategory,
+                ),
+            };
+        })
+        .sort(byName);
+}
+
+function addChildSubcategory(
+    subcategories: SubcategoryOption[],
+    parentId: number,
+    subcategory: SubcategoryOption,
+): SubcategoryOption[] {
+    return subcategories.map((item) => {
+        if (item.id !== parentId) {
+            return item;
+        }
+
+        return {
+            ...item,
+            children: [
+                ...(item.children ?? []),
+                { ...subcategory, children: subcategory.children ?? [] },
+            ].sort(byName),
+        };
+    });
+}
+
+function byName<T extends { name: string }>(first: T, second: T) {
+    return first.name.localeCompare(second.name, "pt-BR");
 }
 
 function specificationsPayload(rows: SpecRow[]) {
