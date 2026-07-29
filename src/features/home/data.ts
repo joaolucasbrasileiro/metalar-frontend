@@ -77,23 +77,6 @@ function getApiUrl(path: string) {
 }
 
 export async function getBestSellerProducts(): Promise<HomeProduct[]> {
-    const mockProducts = await getLocalMockProducts();
-
-    if (mockProducts) {
-        return [...mockProducts]
-            .sort((firstProduct, secondProduct) => {
-                const firstSoldQuantity = firstProduct.soldQuantity ?? 0;
-                const secondSoldQuantity = secondProduct.soldQuantity ?? 0;
-
-                return secondSoldQuantity - firstSoldQuantity;
-            })
-            .slice(0, 12)
-            .map((product, index) => ({
-                ...product,
-                salesRank: index + 1,
-            }));
-    }
-
     try {
         const response = await fetch(getApiUrl("/products/best-sellers"), {
             cache: "no-store",
@@ -110,28 +93,29 @@ export async function getBestSellerProducts(): Promise<HomeProduct[]> {
 
         return (payload.data ?? []).map(mapBestSellerProduct);
     } catch {
-        return [];
+        const mockProducts = await getLocalMockProducts();
+
+        if (!mockProducts) {
+            return [];
+        }
+
+        return [...mockProducts]
+            .sort((firstProduct, secondProduct) => {
+                const firstSoldQuantity = firstProduct.soldQuantity ?? 0;
+                const secondSoldQuantity = secondProduct.soldQuantity ?? 0;
+
+                return secondSoldQuantity - firstSoldQuantity;
+            })
+            .slice(0, 12)
+            .map((product, index) => ({
+                ...product,
+                salesRank: index + 1,
+            }));
     }
 }
 
 export async function getProductsPage(page: number): Promise<ProductsPage> {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-    const mockProducts = await getLocalMockProducts();
-
-    if (mockProducts) {
-        const firstProductIndex = (safePage - 1) * catalogProductsPerPage;
-        const products = mockProducts.slice(
-            firstProductIndex,
-            firstProductIndex + catalogProductsPerPage,
-        );
-
-        return {
-            products,
-            currentPage: safePage,
-            lastPage: Math.max(1, Math.ceil(mockProducts.length / catalogProductsPerPage)),
-            total: mockProducts.length,
-        };
-    }
 
     try {
         const response = await fetch(
@@ -157,7 +141,24 @@ export async function getProductsPage(page: number): Promise<ProductsPage> {
             total: payload.meta?.total ?? 0,
         };
     } catch {
-        return emptyProductsPage(page);
+        const mockProducts = await getLocalMockProducts();
+
+        if (!mockProducts) {
+            return emptyProductsPage(page);
+        }
+
+        const firstProductIndex = (safePage - 1) * catalogProductsPerPage;
+        const products = mockProducts.slice(
+            firstProductIndex,
+            firstProductIndex + catalogProductsPerPage,
+        );
+
+        return {
+            products,
+            currentPage: safePage,
+            lastPage: Math.max(1, Math.ceil(mockProducts.length / catalogProductsPerPage)),
+            total: mockProducts.length,
+        };
     }
 }
 
